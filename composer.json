@@ -1,0 +1,30 @@
+{
+    "name": "corporate/admanagement",
+    "description": "Revisão de solicitações de rede no GLPI com consultas AD somente de leitura",
+    "type": "glpi-plugin",
+    "license": "proprietary",
+    "require": {
+        "php": ">=8.2 <9.0",
+        "ext-json": "*",
+        "ext-mbstring": "*"
+    },
+    "suggest": {
+        "ext-ldap": "Necessária para consultas reais ao AD"
+    },
+    "autoload": {
+        "psr-4": {
+            "GlpiPlugin\\Admanagement\\": "src/"
+        }
+    },
+    "scripts": {
+        "test:acesso": "php tests/acesso.php",
+        "test:carregamento": "php tests/carregamento.php",
+        "test:refatoracao": "php tests/refatoracao.php",
+        "test:fluxo": "php tests/fluxo.php",
+        "test:regras_http": "php tests/regras_http.php",
+        "test:regras_vigentes": "php tests/regras_vigentes.php",
+        "test:concorrencia": "php tests/concorrencia.php",
+        "test:documentacao": "php tests/documentacao.php",
+        "test:visibilidade": "php tests/visibilidade.php"
+    }
+}

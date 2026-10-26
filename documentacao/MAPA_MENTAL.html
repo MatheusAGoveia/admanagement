@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>Mapa mental — ADManagement</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --fundo: #f4f6f8;
+            --papel: #ffffff;
+            --texto: #172a3c;
+            --suave: #526578;
+            --borda: #ccd6df;
+            --destaque: #185d83;
+            --selecao: #e8f3f8;
+            --aviso: #fff6e2;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background: var(--fundo);
+            color: var(--texto);
+            font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+        }
+
+        a { color: var(--destaque); text-underline-offset: 3px; }
+
+        button { font: inherit; cursor: pointer; }
+
+        button:focus-visible, a:focus-visible {
+            outline: 3px solid var(--destaque);
+            outline-offset: 4px;
+        }
+
+        .pagina { max-width: 1600px; margin: auto; padding: 32px; }
+
+        .topo { display: flex; align-items: start; justify-content: space-between; gap: 24px; }
+
+        .sobretitulo { margin: 0 0 8px; color: var(--destaque); font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+
+        h1 { margin: 0; font-size: clamp(26px, 3vw, 40px); line-height: 1.2; letter-spacing: -.03em; }
+
+        .subtitulo { color: var(--suave); margin: 12px 0 0; max-width: 760px; }
+
+        .links { display: flex; gap: 16px; flex-wrap: wrap; padding-top: 8px; font-size: 14px; }
+
+        .aviso { padding: 14px 18px; background: var(--aviso); border-left: 3px solid #ae7715; margin: 24px 0; font-size: 14px; }
+
+        .grade { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(330px, 1fr); gap: 24px; align-items: start; }
+
+        .quadro { background: var(--papel); border: 1px solid var(--borda); border-radius: 16px; overflow: hidden; }
+
+        .cabecalho { padding: 20px 24px 0; }
+
+        h2 { margin: 0; font-size: 21px; line-height: 1.3; }
+
+        .ajuda { color: var(--suave); margin: 8px 0 0; font-size: 14px; }
+
+        .rolagem { overflow-x: auto; overscroll-behavior-x: contain; }
+
+        .mapa { min-width: 800px; height: 660px; position: relative; }
+
+        .conexoes { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
+        .conexoes path { stroke: var(--borda); stroke-width: 1.5; fill: none; vector-effect: non-scaling-stroke; }
+
+        .raiz {
+            position: absolute;
+            left: 39%; top: 278px; width: 22%; height: 104px;
+            display: flex; flex-direction: column; justify-content: center;
+            text-align: center; border-radius: 16px; padding: 14px;
+            background: var(--texto); color: var(--papel);
+        }
+
+        .raiz strong { font-size: 18px; line-height: 1.3; }
+
+        .raiz small { margin-top: 6px; font-size: 12px; }
+
+        .ramo {
+            position: absolute; width: 30%; min-height: 100px;
+            padding: 14px 16px; border: 1px solid var(--borda);
+            background: var(--papel); color: var(--texto); border-radius: 12px;
+            text-align: left; transition: background .15s, border-color .15s;
+        }
+
+        .ramo.esquerda { left: 1%; }
+        .ramo.direita { left: 69%; }
+        .ramo.linha-0 { top: 32px; }
+        .ramo.linha-1 { top: 194px; }
+        .ramo.linha-2 { top: 356px; }
+        .ramo.linha-3 { top: 518px; }
+        .ramo:hover { background: var(--fundo); }
+        .ramo[aria-pressed="true"] { border-color: var(--destaque); background: var(--selecao); box-shadow: inset 3px 0 var(--destaque); }
+        .ramo strong { display: block; font-size: 16px; line-height: 1.4; }
+        .ramo small { display: block; color: var(--suave); margin-top: 5px; font-size: 12px; line-height: 1.45; }
+        .ramo .numero { color: var(--destaque); margin-right: 7px; font-size: 12px; }
+
+        .metadados { padding: 0 24px 20px; color: var(--suave); font-size: 12px; }
+
+        .painel { padding: 24px; }
+
+        .painel > p { margin: 10px 0 16px; font-size: 14px; }
+
+        .lista-arquivos { display: flex; flex-wrap: wrap; gap: 7px; margin: 20px 0; }
+
+        .arquivo { border: 1px solid var(--borda); border-radius: 7px; padding: 7px 10px; color: var(--texto); background: var(--papel); text-align: left; font-size: 12px; overflow-wrap: anywhere; }
+
+        .arquivo[aria-pressed="true"] { background: var(--texto); border-color: var(--texto); color: var(--papel); }
+
+        .detalhe { border-top: 1px solid var(--borda); padding-top: 20px; }
+
+        .caminho { display: block; color: var(--destaque); font-size: 12px; overflow-wrap: anywhere; margin-bottom: 10px; }
+
+        h3 { margin: 0 0 12px; font-size: 19px; line-height: 1.4; overflow-wrap: anywhere; }
+
+        .detalhe p { margin: 10px 0; font-size: 14px; }
+
+        h4 { margin: 20px 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--suave); }
+
+        .metodos { display: flex; flex-wrap: wrap; gap: 6px; }
+
+        code { font: 12px/1.6 ui-monospace, Consolas, monospace; background: var(--fundo); padding: 3px 6px; border-radius: 4px; overflow-wrap: anywhere; }
+
+        .dependencias { display: flex; flex-wrap: wrap; gap: 5px 12px; }
+
+        .dependencia { font-size: 12px; border: 0; padding: 0; background: transparent; color: var(--destaque); text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; text-align: left; }
+
+        .fonte { display: inline-block; margin-top: 18px; font-size: 13px; }
+
+        .limite { margin-top: 22px; padding: 14px; background: var(--fundo); border-radius: 8px; font-size: 13px; }
+
+        .fluxo { margin-top: 24px; padding: 24px; }
+
+        .passos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 22px; margin: 24px 0 0; padding: 0; list-style: none; counter-reset: passo; }
+
+        .passos li { counter-increment: passo; border-top: 2px solid var(--borda); padding-top: 12px; }
+
+        .passos li::before { content: '0' counter(passo); color: var(--destaque); font-size: 12px; display: block; }
+
+        .passos strong { display: block; font-size: 14px; margin: 5px 0; }
+
+        .passos p { color: var(--suave); font-size: 13px; margin: 0; }
+
+        footer { padding: 20px 0 0; color: var(--suave); font-size: 12px; }
+
+        .sem-script { padding: 24px; }
+
+        @media (prefers-color-scheme: dark) {
+            :root { color-scheme: dark; --fundo: #121c26; --papel: #1a2835; --texto: #e8eff6; --suave: #b0c1cf; --borda: #435664; --destaque: #8dcee9; --selecao: #233f50; --aviso: #3c311e; }
+        }
+
+        @media (max-width: 1400px) {
+            .grade { grid-template-columns: minmax(0, 1fr); }
+            .topo { flex-direction: column; gap: 8px; }
+            .mapa { max-width: 1000px; margin: auto; }
+        }
+
+        @media (max-width: 600px) {
+            .pagina { padding: 18px 12px; }
+            .painel, .fluxo { padding: 20px; }
+            .cabecalho { padding: 20px 20px 0; }
+            .passos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .aviso { margin: 18px 0; }
+        }
+
+        @media print {
+            body { background: white; color: black; }
+            .pagina { max-width: none; padding: 0; }
+            .grade { display: block; }
+            .mapa { min-width: 0; }
+            .quadro { break-inside: avoid; }
+            .links, .lista-arquivos, .fonte { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="pagina">
+        <header class="topo">
+            <div>
+                <p class="sobretitulo">ADManagement · documentação do código</p>
+                <h1>Mapa mental da arquitetura</h1>
+                <p class="subtitulo">Do carregamento no GLPI à confirmação do trabalho: explore a responsabilidade de cada parte e siga suas referências no código.</p>
+            </div>
+            <nav class="links" aria-label="Documentação">
+                <a href="UML_CLASSES.html">Diagrama UML</a>
+                <a href="ESTRUTURA_E_ARQUITETURA.md">Ler guia completo</a>
+                <a href="../README.md">README do projeto</a>
+            </nav>
+        </header>
+
+        <p class="aviso"><strong>Limite atual:</strong> confirmar uma revisão registra o trabalho do técnico. A criação/renovação no AD e o fechamento do chamado continuam bloqueados.</p>
+
+        <main>
+            <div class="grade">
+                <section class="quadro" aria-labelledby="titulo-mapa">
+                    <div class="cabecalho">
+                        <h2 id="titulo-mapa">Oito responsabilidades conectadas</h2>
+                        <p class="ajuda">Escolha um ramo e depois um arquivo. Em telas estreitas, role o mapa na horizontal.</p>
+                    </div>
+                    <div class="rolagem" tabindex="0" aria-label="Mapa mental com rolagem horizontal">
+                        <div class="mapa" id="mapa">
+                            <svg class="conexoes" viewBox="0 0 1000 660" preserveAspectRatio="none" aria-hidden="true">
+                                <path d="M390 330 C350 330 360 82 310 82 M390 330 C350 330 360 244 310 244 M390 330 C350 330 360 406 310 406 M390 330 C350 330 360 568 310 568" />
+                                <path d="M610 330 C650 330 640 82 690 82 M610 330 C650 330 640 244 690 244 M610 330 C650 330 640 406 690 406 M610 330 C650 330 640 568 690 568" />
+                            </svg>
+                            <div class="raiz"><strong>ADManagement</strong><small>PHP · GLPI · versão 0.6.0</small></div>
+                        </div>
+                    </div>
+                    <div class="metadados">Base consultada em 23/10/2026 · 51 arquivos PHP · 32 classes próprias · agrupamento por responsabilidade.</div>
+                </section>
+
+                <section class="quadro painel" aria-labelledby="titulo-ramo">
+                    <p class="sobretitulo" id="numero-ramo"></p>
+                    <h2 id="titulo-ramo"></h2>
+                    <p id="explicacao-ramo"></p>
+                    <div class="lista-arquivos" id="lista-arquivos" role="group" aria-label="Arquivos do ramo selecionado"></div>
+                    <div class="detalhe" id="detalhe" aria-live="polite" aria-atomic="true">
+                        <span class="caminho" id="caminho"></span>
+                        <h3 id="nome-arquivo"></h3>
+                        <p id="responsabilidade"></p>
+                        <p id="nota-arquivo"></p>
+                        <div id="secao-metodos">
+                            <h4>Funções e métodos públicos</h4>
+                            <div class="metodos" id="metodos"></div>
+                        </div>
+                        <div id="secao-dependencias">
+                            <h4>Referências a classes próprias</h4>
+                            <div class="dependencias" id="dependencias"></div>
+                        </div>
+                        <a class="fonte" id="link-fonte" target="_blank" rel="noopener">Abrir arquivo do projeto ↗</a>
+                    </div>
+                    <div class="limite" id="limite-ramo"></div>
+                </section>
+            </div>
+
+            <section class="quadro fluxo" aria-labelledby="titulo-fluxo">
+                <h2 id="titulo-fluxo">O caminho de uma revisão</h2>
+                <ol class="passos">
+                    <li><strong>Autorizar e ler</strong><p>Contexto nativo, fila autorizada, chamado e formulário aprovado com vínculo único.</p></li>
+                    <li><strong>Importar e corrigir</strong><p>Rascunho temporário separado por técnico, entidade e chamado; revisão esperada em cada alteração.</p></li>
+                    <li><strong>Consultar e resumir</strong><p>OUs e identidades por comando explícito; resumo ligado à origem, ao contexto e às evidências vigentes.</p></li>
+                    <li><strong>Confirmar o trabalho</strong><p>Desafio consumido, rascunho atualizado e evento privado de revisão. Nenhuma escrita AD executada.</p></li>
+                </ol>
+            </section>
+
+            <noscript><p class="sem-script">A navegação do mapa usa JavaScript local. Consulte o <a href="ESTRUTURA_E_ARQUITETURA.md">guia completo em Markdown</a> para ver todas as classes e relações.</p></noscript>
+        </main>
+
+        <footer>As conexões do mapa representam grupos de responsabilidade. As referências de cada arquivo vêm do fonte local; os testes usam dublês e não acessam AD ou banco reais.</footer>
+    </div>
+
+    <script id="dados-arquitetura" type="application/json">{"versao":"0.6.0","data":"23/10/2026","arquivosPhp":51,"classes":32,"grupos":[{"id":"integracao","titulo":"Entrada e integração","resumo":"O GLPI carrega o plugin e disponibiliza seus links.","explicacao":"setup.php declara a versão, os requisitos e os hooks do menu. hook.php participa da instalação e desinstalação. As páginas de front/ carregam o bootstrap do GLPI antes de usar sua sessão, conexão e classes.","limite":"A instalação atual não cria tabelas nem concede direitos. O namespace declarado no Composer é GlpiPlugin\\Admanagement, associado à pasta src/.","arquivos":[{"caminho":"setup.php","nome":"setup.php","responsabilidade":"Registra a identidade, a faixa de versões alvo e os hooks de menu/configuração do plugin.","nota":"","metodos":["plugin_init_admanagement","plugin_version_admanagement","plugin_admanagement_check_prerequisites","plugin_admanagement_check_config"],"dependencias":["src/AcessoGlpi.php","src/MenuDaFerramenta.php"]},{"caminho":"hook.php","nome":"hook.php","responsabilidade":"Implementa os pontos de instalação e desinstalação consultados pelo GLPI.","nota":"","metodos":["plugin_admanagement_install","plugin_admanagement_uninstall"],"dependencias":[]},{"caminho":"composer.json","nome":"composer.json","responsabilidade":"Declara requisitos, associação PSR-4 do namespace e atalhos para as nove suítes.","nota":"","metodos":[],"dependencias":[]},{"caminho":"src/MenuDaFerramenta.php","nome":"MenuDaFerramenta.php","responsabilidade":"Define os links do plugin que o usuário atual pode visualizar no menu GLPI.","nota":"","metodos":["getMenuContent"],"dependencias":["src/AcessoGlpi.php","src/EnderecoDaFerramenta.php"]},{"caminho":"src/EnderecoDaFerramenta.php","nome":"EnderecoDaFerramenta.php","responsabilidade":"Resolve a URL nativa sem depender da localização física plugins/marketplace.","nota":"","metodos":["raiz"],"dependencias":[]}]},{"id":"acesso","titulo":"Acesso e configuração","resumo":"Define quem pode operar e quais recortes serão usados.","explicacao":"AcessoGlpi obtém identidade, perfil, grupos e entidades da sessão. PoliticaDeVisibilidade resolve concessões cumulativas por usuário OU grupo OU perfil ativo. ConfiguracaoDeVisibilidade valida setores e regras; Super-Admin ativo com config/UPDATE configura o plugin.","limite":"Super-Admin vê todo o alcance nativo; administrador vê somente setores concedidos; técnico vê somente atribuição individual. A política nova vazia nega os demais. O legado vale apenas antes da primeira gravação e nunca promove administradores. Entidades e grupos ficam pareados por setor.","arquivos":[{"caminho":"src/AcessoGlpi.php","nome":"AcessoGlpi.php","responsabilidade":"Confere a sessão GLPI e resolve concessões por usuário, grupo ou perfil ativo.","nota":"O nome ativo Super-Admin e config/UPDATE são obtidos da sessão GLPI. Essa combinação dispensa somente as listas próprias de autorização; os controles nativos continuam obrigatórios.","metodos":["podeConfigurar","exigirConfiguracao","podeAcessar","estaComAcessoTemporarioParaTestes","obterContextoDoTecnico","exigirAcesso"],"dependencias":["src/ConfiguracaoDeAcesso.php","src/ConfiguracaoDeVisibilidade.php","src/ControleDeAcesso.php","src/PoliticaDeVisibilidade.php","src/RepositorioDeRascunhos.php"]},{"caminho":"src/ControleDeAcesso.php","nome":"ControleDeAcesso.php","responsabilidade":"Aplica as listas próprias, com exceção do Super-Admin validado e do laboratório explícito.","nota":"","metodos":["avaliarPerfilGrupoEEntidade"],"dependencias":[]},{"caminho":"src/ConfiguracaoDeAcesso.php","nome":"ConfiguracaoDeAcesso.php","responsabilidade":"Reúne as permissões do arquivo local e os grupos salvos na configuração da fila.","nota":"Combina a configuração operacional com os valores locais de config/acesso.php e os grupos configurados na fila.","metodos":["consultar"],"dependencias":["src/ConfiguracaoDaFila.php","src/ConfiguracaoOperacional.php"]},{"caminho":"src/ConfiguracaoOperacional.php","nome":"ConfiguracaoOperacional.php","responsabilidade":"Guarda escolhas administrativas próprias sem criar tabelas nem conceder direitos.","nota":"Persiste valores JSON no contexto admanagement de Config do GLPI e confere a gravação por releitura.","metodos":["consultar","salvar","salvarAcesso"],"dependencias":["src/AcessoGlpi.php","src/EntradaDaFerramenta.php"]},{"caminho":"src/ConfiguracaoDaFila.php","nome":"ConfiguracaoDaFila.php","responsabilidade":"Centraliza a leitura, a validação e a gravação dos grupos e categorias usados na fila.","nota":"Valida IDs nativos de grupos e categorias e usa Config do GLPI para persistir o recorte. Não inclui subcategorias implicitamente.","metodos":["consultar","salvar"],"dependencias":["src/AcessoGlpi.php"]},{"caminho":"src/ConfiguracaoDoDiretorio.php","nome":"ConfiguracaoDoDiretorio.php","responsabilidade":"Configura somente leitura LDAP; senhas continuam no ambiente do servidor.","nota":"Guarda parâmetros dos domínios e nomes de variáveis de ambiente de credenciais. Salvar a configuração não inicia uma conexão LDAP.","metodos":["consultar","salvar","obter"],"dependencias":["src/ConfiguracaoOperacional.php","src/EntradaDaFerramenta.php"]},{"caminho":"src/EntradaDaFerramenta.php","nome":"EntradaDaFerramenta.php","responsabilidade":"Valida os valores recebidos antes de usá-los nas consultas e nos rascunhos.","nota":"","metodos":["lerIdentificador","lerTexto"],"dependencias":[]},{"caminho":"config/acesso.php","nome":"acesso.php","responsabilidade":"Preserva os valores legados e o laboratório até ativar a política nova; não concede administração setorial.","nota":"","metodos":[],"dependencias":[]},{"caminho":"front/config.php","nome":"config.php","responsabilidade":"Protege e processa as telas administrativas de acesso, fila e conexões LDAP de leitura.","nota":"","metodos":[],"dependencias":["src/AcessoGlpi.php","src/ApresentacaoDaConfiguracao.php","src/ConfiguracaoDaFila.php","src/ConfiguracaoDoDiretorio.php","src/ConfiguracaoOperacional.php","src/EnderecoDaFerramenta.php","src/InterfaceDaFerramenta.php","src/MenuDaFerramenta.php"]},{"caminho":"src/ConfiguracaoDeVisibilidade.php","nome":"ConfiguracaoDeVisibilidade.php","responsabilidade":"Valida e persiste setores e concessões sem alterar grupos, usuários ou perfis nativos.","nota":"","metodos":["consultar","normalizarLista","validar","alterar","assinatura","assinaturaDoDocumento","restaurar"],"dependencias":["src/AcessoGlpi.php","src/ConfiguracaoOperacional.php","src/EntradaDaFerramenta.php"]},{"caminho":"src/PoliticaDeVisibilidade.php","nome":"PoliticaDeVisibilidade.php","responsabilidade":"Resolve concessões positivas de usuário, grupo ou perfil sem consultar entradas HTTP.","nota":"","metodos":["resolver","contextoValido","descrever"],"dependencias":[]}]},{"id":"origem","titulo":"Fila e origem","resumo":"Transforma chamados e formulários reais em dados de trabalho.","explicacao":"ConsultaDeChamados compartilha o escopo entre fila, ID, visão geral, histórico e metadados de pendências. Categorias operacionais restringem importação, sem ocultar chamados autorizados. LeitorDoFormmanager lê vínculos e ImportadorDaSolicitacao valida rede, aprovação e serviço.","limite":"Grupo responsável vem do ator Atribuído, não da lotação descrita no formulário. E-mail visível não vira solicitação de rede. GLPI mantém leitura por recurso; a mesma atribuição é exigida em GET e POST.","arquivos":[{"caminho":"front/index.php","nome":"index.php","responsabilidade":"Carrega o GLPI, autoriza o técnico, consulta a fila e mostra impedimentos da origem.","nota":"","metodos":[],"dependencias":["src/AcessoGlpi.php","src/ConfiguracaoDaFila.php","src/ConsultaDeChamados.php","src/EnderecoDaFerramenta.php","src/EntradaDaFerramenta.php","src/FormularioDaSolicitacao.php","src/ImportadorDaSolicitacao.php","src/InterfaceDaFerramenta.php","src/LeitorDoFormmanager.php","src/MenuDaFerramenta.php"]},{"caminho":"src/ConsultaDeChamados.php","nome":"ConsultaDeChamados.php","responsabilidade":"Aplica a mesma política de atribuição a listas, histórico, filtros e abertura direta por ID.","nota":"listar() restringe a fila à atribuição individual ou aos grupos. consultar() revalida o ID no escopo de categoria, entidade e leitura, sem exigir atribuição pessoal.","metodos":["__construct","listar","listarPagina","consultar","pertenceAoEscopo"],"dependencias":["src/RepositorioDeRascunhos.php"]},{"caminho":"src/LeitorDoFormmanager.php","nome":"LeitorDoFormmanager.php","responsabilidade":"Lê os formulários de origem sem executar ações ou gravar dados no formmanager.","nota":"Lê glpi_plugin_formmanager_forms_atual pela conexão $DB recebida. Confere metadados e campos de vínculo; não carrega código do outro plugin.","metodos":["__construct","listarFormularios","consultarIdentificadores"],"dependencias":["src/EntradaDaFerramenta.php"]},{"caminho":"src/ImportadorDaSolicitacao.php","nome":"ImportadorDaSolicitacao.php","responsabilidade":"Transforma um formulário aprovado e vinculado ao chamado em dados de trabalho locais.","nota":"Aceita os serviços exatos CADASTRO e RENOVAR USUÁRIO, status 3 e solicitação de rede. Gera assinatura dos dados relevantes da origem.","metodos":["importar"],"dependencias":[]}]},{"id":"revisao","titulo":"Revisão do trabalho","resumo":"Corrige os dados, consulta evidências e confirma um resumo.","explicacao":"front/revisao.php relê autorização, chamado e origem, trata as ações e salva o rascunho com auditoria. CoordenadorDaRevisao encaminha os comandos de consulta e resumo. RevisorDaOperacao aplica correções; as políticas de login, destino e vigência validam o conteúdo.","limite":"Confirmação significa revisão de trabalho. O resumo tem prazo e desafio consumível; mudanças observadas na origem, no contexto ou na configuração podem invalidá-lo.","arquivos":[{"caminho":"front/revisao.php","nome":"revisao.php","responsabilidade":"Controla importação, correção, consultas, resumo, confirmação e descarte do trabalho local.","nota":"A origem é relida inclusive no GET. O POST passa pelo listener CSRF nativo referido pela entrada, exige revisão esperada e registra eventos com auditoria; o descarte não altera a origem.","metodos":[],"dependencias":["src/AcessoGlpi.php","src/ConfiguracaoDaFila.php","src/ConsultaDeChamados.php","src/CoordenadorDaRevisao.php","src/EnderecoDaFerramenta.php","src/EntradaDaFerramenta.php","src/FormularioDaSolicitacao.php","src/ImportadorDaSolicitacao.php","src/InterfaceDaFerramenta.php","src/LeitorDoFormmanager.php","src/MenuDaFerramenta.php","src/RepositorioDeOperacoes.php","src/RepositorioDeRascunhos.php","src/RevisaoDaOperacao.php","src/RevisorDaOperacao.php"]},{"caminho":"src/CoordenadorDaRevisao.php","nome":"CoordenadorDaRevisao.php","responsabilidade":"Coordena ações locais depois da releitura obrigatória de ticket, origem e autorização.","nota":"Atende consultar_ous, consultar_diretorio, preparar_resumo e confirmar_revisao. O catálogo de OUs recebe validade de 300 segundos.","metodos":["processar"],"dependencias":["src/ConfiguracaoDoDiretorio.php","src/EntradaDaFerramenta.php","src/LeitorDoFormmanager.php","src/LeitorLdap.php","src/PoliticaDeLogin.php","src/RevisaoDaOperacao.php","src/RevisorDaOperacao.php","src/VerificadorDoDiretorio.php"]},{"caminho":"src/RevisorDaOperacao.php","nome":"RevisorDaOperacao.php","responsabilidade":"Aplica correções no rascunho local e informa o que ainda precisa de revisão.","nota":"","metodos":["aplicar","obterNomeParaLogin","listarPendencias"],"dependencias":["src/DestinoDaOperacao.php","src/EntradaDaFerramenta.php","src/PoliticaDeLogin.php"]},{"caminho":"src/RevisaoDaOperacao.php","nome":"RevisaoDaOperacao.php","responsabilidade":"Associa o resumo ao conteúdo, à origem e à autorização atuais, sem executar efeitos no AD.","nota":"O resumo expira em 600 segundos. O desafio é consumido na confirmação. A vigência inclui origem, contexto, configuração, catálogo e evidências observadas.","metodos":["preparar","confirmar","continuaValida","mostrar","assinaturaDoContexto"],"dependencias":["src/ConfiguracaoDaFila.php","src/ConfiguracaoDoDiretorio.php","src/ConfiguracaoOperacional.php","src/EntradaDaFerramenta.php","src/NomeDistinto.php"]},{"caminho":"src/PoliticaDeLogin.php","nome":"PoliticaDeLogin.php","responsabilidade":"Compõe sugestões textuais de login; a consulta ao AD ainda não faz parte desta classe.","nota":"Gera sugestões textuais. A disponibilidade é responsabilidade da consulta LDAP, não desta política.","metodos":["gerarCandidatos","passaNaVerificacaoInicial"],"dependencias":[]},{"caminho":"src/DestinoDaOperacao.php","nome":"DestinoDaOperacao.php","responsabilidade":"Valida a escolha manual contra o catálogo real e sua configuração vigente.","nota":"A escolha de domínio e OU é manual. A OU precisa constar no catálogo real vigente e pertencer à Base DN do domínio.","metodos":["aplicar","mostrar"],"dependencias":["src/ConfiguracaoDoDiretorio.php","src/EntradaDaFerramenta.php","src/NomeDistinto.php"]}]},{"id":"diretorio","titulo":"Diretório AD","resumo":"Consulta OUs, disponibilidade e possíveis duplicidades.","explicacao":"LeitorLdap concentra a conexão e as pesquisas LDAP. VerificadorDoDiretorio combina os resultados por domínio e distingue cobertura completa, ocorrência e falha de consulta. NomeDistinto trata caminhos LDAP e pertencimento à Base DN.","limite":"Consultas acontecem por comando explícito. Login sugerido não prova disponibilidade; falha de consulta não prova inexistência. O adaptador possui métodos de leitura.","arquivos":[{"caminho":"src/LeitorLdap.php","nome":"LeitorLdap.php","responsabilidade":"Único adaptador LDAP do produto: possui exclusivamente métodos de leitura.","nota":"O construtor prepara a conexão de leitura. Os métodos públicos listam OUs, verificam login e leem identidades; não há método de criação ou alteração de contas.","metodos":["__construct","__destruct","listarOus","loginOcupado","listarIdentidades"],"dependencias":["src/NomeDistinto.php"]},{"caminho":"src/VerificadorDoDiretorio.php","nome":"VerificadorDoDiretorio.php","responsabilidade":"Separa candidatos, disponibilidade e duplicidades, com cobertura explícita de todos os domínios.","nota":"Distingue os candidatos da política, a disponibilidade consultada e os indícios de duplicidade. Uma cobertura incompleta não vira conclusão de ausência.","metodos":["__construct","consultarDisponibilidade","consultarDuplicidades"],"dependencias":["src/LeitorLdap.php","src/PoliticaDeLogin.php"]},{"caminho":"src/NomeDistinto.php","nome":"NomeDistinto.php","responsabilidade":"Manipula caminhos LDAP preservando vírgulas escapadas e a identidade do ramo.","nota":"","metodos":["pai","pertenceAoDominio"],"dependencias":[]}]},{"id":"estado","titulo":"Estado e auditoria","resumo":"Separa trabalho temporário, eventos e resultados duráveis.","explicacao":"RepositorioDeRascunhos usa a sessão e controla revisões. RepositorioDeOperacoes mantém metadados privados em JSON com lock e substituição atômica. PoliticaDeResultados distingue o resultado do AD do resultado da finalização no GLPI.","limite":"Os contratos de reserva, tentativa e resultado existem para um executor futuro. As rotas atuais não os transformam em escrita AD ou fechamento de chamado; a auditoria de revisão já é usada.","arquivos":[{"caminho":"src/RepositorioDeRascunhos.php","nome":"RepositorioDeRascunhos.php","responsabilidade":"Guarda o trabalho na sessão, separado por técnico, entidade e chamado.","nota":"O estado temporário é separado por técnico, entidade e chamado. Revisões esperadas evitam sobrescrever o trabalho com uma aba antiga; comAuditoria() restaura o rascunho se a ação auditada falhar.","metodos":["consultar","guardarInicial","salvar","descartar","comAuditoria","invalidarConfirmacao","invalidarTodosDaSessao","conferirContexto","listar"],"dependencias":["src/RevisaoDaOperacao.php"]},{"caminho":"src/RepositorioDeOperacoes.php","nome":"RepositorioDeOperacoes.php","responsabilidade":"Preserva somente metadados privados, com lock exclusivo e substituição atômica.","nota":"Armazena estado.json em GLPI_VAR_DIR/_plugins/admanagement, com .lock e gravação temporária seguida de rename. A auditoria preserva metadados mínimos, sem snapshots completos.","metodos":["__construct","doGlpi","transacionar","consultar","registrar","reservarNecessidade","iniciarTentativa","registrarResultadoAd","registrarFinalizacao"],"dependencias":[]},{"caminho":"src/PoliticaDeResultados.php","nome":"PoliticaDeResultados.php","responsabilidade":"Mantém AD e fechamento como resultados independentes e fixa o alvo de cada tentativa.","nota":"SUCESSO_COMPROVADO permite apenas a finalização do chamado fixado. Estados incertos exigem reconciliação. exigirExecucaoReal() sempre lança uma exceção nesta versão.","metodos":["proximaEtapa","exigirExecucaoReal"],"dependencias":[]},{"caminho":"front/pending.php","nome":"pending.php","responsabilidade":"Exibe rascunhos com pendências e as orientações derivadas dos estados duráveis visíveis.","nota":"","metodos":[],"dependencias":["src/AcessoGlpi.php","src/EnderecoDaFerramenta.php","src/InterfaceDaFerramenta.php","src/MenuDaFerramenta.php","src/PoliticaDeResultados.php","src/RepositorioDeOperacoes.php","src/RepositorioDeRascunhos.php","src/RevisorDaOperacao.php"]},{"caminho":"front/audit.php","nome":"audit.php","responsabilidade":"Lista até cem eventos visíveis, filtrados pelo ator, entidade e direito de leitura do chamado.","nota":"A exibição atual é restrita ao técnico e à entidade do contexto e ao direito nativo no ticket. Um evento de revisão não comprova efeito no AD.","metodos":[],"dependencias":["src/AcessoGlpi.php","src/EnderecoDaFerramenta.php","src/InterfaceDaFerramenta.php","src/MenuDaFerramenta.php","src/RepositorioDeOperacoes.php"]}]},{"id":"interface","titulo":"Interface e equipe","resumo":"Renderiza as telas e apresenta o atendimento coletivo.","explicacao":"InterfaceDaFerramenta fornece a estrutura visual comum e o CSS. FormularioDaSolicitacao e Apresentacao* renderizam dados e controles. PaginaDaEquipe usa AcompanhamentoDaEquipe para apresentar visão geral e histórico com os direitos nativos por chamado.","limite":"O HTML é gerado pelo PHP. Histórico da equipe, auditoria do plugin e resultado AD são informações diferentes. Algumas classes de revisão também possuem métodos mostrar().","arquivos":[{"caminho":"src/InterfaceDaFerramenta.php","nome":"InterfaceDaFerramenta.php","responsabilidade":"Organiza a apresentação PHP sem consultar dados ou executar ações do técnico.","nota":"A apresentação e o CSS estão no próprio PHP; não há um frontend separado neste repositório.","metodos":["mostrarInicio","mostrarFim","mostrarDestinoPendente","mostrarFormularioVazio"],"dependencias":[]},{"caminho":"src/FormularioDaSolicitacao.php","nome":"FormularioDaSolicitacao.php","responsabilidade":"Mostra a fila e os formulários em PHP, escapando os textos vindos dos dados.","nota":"","metodos":["mostrarFila","mostrarRevisao","mostrarImportacao"],"dependencias":["src/ApresentacaoDeConsultas.php","src/DestinoDaOperacao.php","src/PoliticaDeLogin.php","src/RevisaoDaOperacao.php","src/RevisorDaOperacao.php"]},{"caminho":"src/ApresentacaoDaConfiguracao.php","nome":"ApresentacaoDaConfiguracao.php","responsabilidade":"Apresenta parâmetros administrativos de acesso e leitura, sem oferecer escrita no AD.","nota":"","metodos":["mostrarAcesso","mostrarDiretorios"],"dependencias":["src/ApresentacaoDaVisibilidade.php","src/ConfiguracaoDoDiretorio.php"]},{"caminho":"src/ApresentacaoDeConsultas.php","nome":"ApresentacaoDeConsultas.php","responsabilidade":"Explica disponibilidade e cobertura sem confundir ausência de resposta com ausência de conta.","nota":"","metodos":["mostrar"],"dependencias":["src/ConfiguracaoDoDiretorio.php"]},{"caminho":"src/PaginaDaEquipe.php","nome":"PaginaDaEquipe.php","responsabilidade":"Apresenta atendimentos reais da equipe e mantém o histórico distinto da auditoria.","nota":"","metodos":["mostrar"],"dependencias":["src/AcessoGlpi.php","src/AcompanhamentoDaEquipe.php","src/ConfiguracaoDaFila.php","src/EnderecoDaFerramenta.php","src/EntradaDaFerramenta.php","src/InterfaceDaFerramenta.php","src/MenuDaFerramenta.php","src/PoliticaDeVisibilidade.php"]},{"caminho":"src/AcompanhamentoDaEquipe.php","nome":"AcompanhamentoDaEquipe.php","responsabilidade":"Consulta atendimento coletivo sem confundir histórico de chamados com efeitos no AD.","nota":"Consulta a equipe configurada e aceita filtro por um integrante válido. O histórico restringe os estados a SOLVED e CLOSED.","metodos":["__construct","listarTecnicos","consultar"],"dependencias":["src/ConsultaDeChamados.php"]},{"caminho":"front/overview.php","nome":"overview.php","responsabilidade":"Abre a visão geral da equipe por meio de PaginaDaEquipe::mostrar(false).","nota":"","metodos":[],"dependencias":["src/PaginaDaEquipe.php"]},{"caminho":"front/historico.php","nome":"historico.php","responsabilidade":"Abre o histórico de solucionados e fechados com PaginaDaEquipe::mostrar(true).","nota":"","metodos":[],"dependencias":["src/PaginaDaEquipe.php"]},{"caminho":"src/ApresentacaoDaVisibilidade.php","nome":"ApresentacaoDaVisibilidade.php","responsabilidade":"Apresenta setores e permissões por usuário, grupo ou perfil com os seletores oficiais do GLPI.","nota":"","metodos":["mostrar"],"dependencias":["src/ConfiguracaoDeVisibilidade.php","src/EntradaDaFerramenta.php"]}]},{"id":"testes","titulo":"Verificação","resumo":"Exercita os contratos sem usar AD ou banco reais.","explicacao":"As nove suítes são scripts PHP independentes. O runner PowerShell executa cada uma em um processo e interrompe na primeira falha. O Composer declara atalhos equivalentes. Dublês e dados de contrato ficam em tests/.","limite":"Essas verificações locais ajudam a detectar regressões. A homologação operacional nas instalações GLPI e no PHP web continua sendo uma etapa própria.","arquivos":[{"caminho":"tests/acesso.php","nome":"acesso.php","responsabilidade":"Verifica a política de perfil, grupo e entidade, a exceção do Super-Admin, entradas inválidas e a exceção local.","nota":"","metodos":["getConfigurationValues","setConfigurationValues","getFromDB","show","haveRight","addMessageAfterRedirect","getLoginUserID","getCurrentInterface","getActiveEntity","haveAccessToEntity","checkLoginUser","isPluginActive","getWebDir","header","footer","closeForm","redirect"],"dependencias":[]},{"caminho":"tests/carregamento.php","nome":"carregamento.php","responsabilidade":"Verifica os contratos de descoberta, instalação e carregamento do plugin.","nota":"","metodos":[],"dependencias":[]},{"caminho":"tests/refatoracao.php","nome":"refatoracao.php","responsabilidade":"Exercita os contratos de leitura, validação e apresentação cobertos pela refatoração.","nota":"","metodos":["getConfigurationValues","setConfigurationValues","getLoginUserID","getCurrentInterface","getActiveEntity","haveRight","haveAccessToEntity","checkLoginUser","isPluginActive","getWebDir","getFromDB","getTable","getTable","getTable","can","request","tableExists","listFields","closeForm"],"dependencias":[]},{"caminho":"tests/fluxo.php","nome":"fluxo.php","responsabilidade":"Verifica o encadeamento de importação, edição e armazenamento do trabalho local.","nota":"","metodos":["getConfigurationValues","getLoginUserID","getCurrentInterface","getActiveEntity","haveAccessToEntity","haveRight","checkLoginUser","addMessageAfterRedirect","isPluginActive","getWebDir","getTable","getTable","getTable","can","header","footer","closeForm","redirect","__construct","request","tableExists","listFields"],"dependencias":[]},{"caminho":"tests/regras_http.php","nome":"regras_http.php","responsabilidade":"Exercita a entrada HTTP de revisão com dublês do GLPI e verifica as respostas e transições.","nota":"","metodos":[],"dependencias":[]},{"caminho":"tests/regras_vigentes.php","nome":"regras_vigentes.php","responsabilidade":"Verifica regras da revisão, destino, login, diretório e resultados com dados de contrato.","nota":"","metodos":["getConfigurationValues","can","__construct","loginOcupado","listarIdentidades","request"],"dependencias":[]},{"caminho":"tests/concorrencia.php","nome":"concorrencia.php","responsabilidade":"Usa processos concorrentes para verificar a exclusividade da reserva e a integridade do registro.","nota":"","metodos":[],"dependencias":[]},{"caminho":"tests/documentacao.php","nome":"documentacao.php","responsabilidade":"Usa tokens PHP para conferir comentários em classes, funções, condições, ramos e laços.","nota":"","metodos":[],"dependencias":[]},{"caminho":"tests/run.ps1","nome":"run.ps1","responsabilidade":"Executa as nove suítes PHP em processos separados e propaga a primeira falha.","nota":"","metodos":[],"dependencias":[]},{"caminho":"tests/visibilidade.php","nome":"visibilidade.php","responsabilidade":"Verifica papéis, concessões por usuário/grupo/perfil, setor/entidade, filtros, ID direto e recuperação.","nota":"Dados sintéticos, sem conexão real ao GLPI ou AD.","metodos":[],"dependencias":[]}]}]}</script>
+    <script>
+        'use strict';
+
+        const dados = JSON.parse(document.getElementById('dados-arquitetura').textContent);
+        const mapa = document.getElementById('mapa');
+        const lista = document.getElementById('lista-arquivos');
+        const botoesRamos = new Map();
+        let ramoAtual;
+
+        function texto(id, valor) {
+            document.getElementById(id).textContent = valor;
+        }
+
+        function selecionarArquivo(arquivo) {
+            for (const botao of lista.querySelectorAll('button')) {
+                botao.setAttribute('aria-pressed', String(botao.dataset.caminho === arquivo.caminho));
+            }
+
+            texto('caminho', arquivo.caminho);
+            texto('nome-arquivo', arquivo.nome);
+            texto('responsabilidade', arquivo.responsabilidade);
+            texto('nota-arquivo', arquivo.nota);
+            document.getElementById('nota-arquivo').hidden = !arquivo.nota;
+            document.getElementById('link-fonte').href = '../' + arquivo.caminho;
+
+            const metodos = document.getElementById('metodos');
+            metodos.replaceChildren();
+            for (const nome of arquivo.metodos) {
+                const elemento = document.createElement('code');
+                elemento.textContent = nome + '()';
+                metodos.append(elemento);
+            }
+            document.getElementById('secao-metodos').hidden = arquivo.metodos.length === 0;
+
+            const dependencias = document.getElementById('dependencias');
+            dependencias.replaceChildren();
+            for (const caminho of arquivo.dependencias) {
+                const botao = document.createElement('button');
+                botao.type = 'button';
+                botao.className = 'dependencia';
+                botao.textContent = caminho.split('/').pop().replace(/\.php$/, '');
+                botao.title = 'Explorar ' + caminho;
+                botao.addEventListener('click', () => irParaArquivo(caminho));
+                dependencias.append(botao);
+            }
+            document.getElementById('secao-dependencias').hidden = arquivo.dependencias.length === 0;
+        }
+
+        function selecionarRamo(grupo, caminho) {
+            ramoAtual = grupo;
+            for (const [id, botao] of botoesRamos) {
+                botao.setAttribute('aria-pressed', String(id === grupo.id));
+            }
+
+            texto('numero-ramo', 'Ramo ' + (dados.grupos.indexOf(grupo) + 1) + ' · ' + grupo.arquivos.length + ' arquivos');
+            texto('titulo-ramo', grupo.titulo);
+            texto('explicacao-ramo', grupo.explicacao);
+            texto('limite-ramo', grupo.limite);
+            lista.replaceChildren();
+
+            for (const arquivo of grupo.arquivos) {
+                const botao = document.createElement('button');
+                botao.type = 'button';
+                botao.className = 'arquivo';
+                botao.dataset.caminho = arquivo.caminho;
+                botao.textContent = arquivo.nome;
+                botao.title = arquivo.caminho;
+                botao.addEventListener('click', () => selecionarArquivo(arquivo));
+                lista.append(botao);
+            }
+
+            selecionarArquivo(grupo.arquivos.find(arquivo => arquivo.caminho === caminho) || grupo.arquivos[0]);
+        }
+
+        function irParaArquivo(caminho) {
+            const grupo = dados.grupos.find(item => item.arquivos.some(arquivo => arquivo.caminho === caminho));
+            if (grupo) {
+                selecionarRamo(grupo, caminho);
+                document.getElementById('nome-arquivo').scrollIntoView({ block: 'nearest' });
+                const selecionado = lista.querySelector('[aria-pressed="true"]');
+                if (selecionado) selecionado.focus({ preventScroll: true });
+            }
+        }
+
+        for (const [indice, grupo] of dados.grupos.entries()) {
+            const botao = document.createElement('button');
+            botao.type = 'button';
+            botao.className = 'ramo ' + (indice < 4 ? 'esquerda' : 'direita') + ' linha-' + (indice % 4);
+            botao.setAttribute('aria-pressed', 'false');
+            botao.setAttribute('aria-controls', 'titulo-ramo lista-arquivos detalhe');
+            const titulo = document.createElement('strong');
+            const numero = document.createElement('span');
+            numero.className = 'numero';
+            numero.textContent = String(indice + 1).padStart(2, '0');
+            titulo.append(numero, document.createTextNode(grupo.titulo));
+            const resumo = document.createElement('small');
+            resumo.textContent = grupo.resumo;
+            botao.append(titulo, resumo);
+            botao.addEventListener('click', () => selecionarRamo(grupo));
+            mapa.append(botao);
+            botoesRamos.set(grupo.id, botao);
+        }
+
+        selecionarRamo(dados.grupos.find(grupo => grupo.id === 'revisao'));
+    </script>
+</body>
+</html>
