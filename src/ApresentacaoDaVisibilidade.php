@@ -3,20 +3,20 @@
 namespace GlpiPlugin\Admanagement;
 
 /**
- * Apresenta setores e permissões por usuário, grupo ou perfil com os seletores oficiais do GLPI.
+
+ * Apresenta mapas de setor e perfil com seletores nativos, sem conceder direitos.
+
  */
 
 final class ApresentacaoDaVisibilidade {
 
     /**
-     * Mostra concessões existentes e formulários de edição sem gravar durante consultas GET.
+
+     * Mostra o mapa atual ou uma recuperação explícita que preserva o documento anterior.
+
      */
 
-    public static function mostrar(
-
-        string $url
-
-    ): void {
+    public static function mostrar(string $url): void {
 
         try {
 
@@ -24,39 +24,107 @@ final class ApresentacaoDaVisibilidade {
 
         } catch (\DomainException | \InvalidArgumentException $erro) {
 
-            // O Super-Admin pode reparar documento corrompido sem liberar usuários durante a falha.
+            // Documentos antigos não podem ativar grupos ou usuários enquanto aguardam migração.
 
-            echo '<section class="contas-cartao mt-3"><div class="contas-corpo"><h2>Recuperar configuração de acesso</h2><p class="alert alert-danger">A política de visibilidade está inválida. A operação dos demais usuários permanece bloqueada.</p><form method="post" action="' . htmlescape($url) . '"><input type="hidden" name="acao_configuracao" value="restaurar_visibilidade"><input type="hidden" name="revisao_documento" value="' . ConfiguracaoDeVisibilidade::assinaturaDoDocumento() . '"><label><input type="checkbox" name="confirmar_restauracao" value="1" required> Preservar o documento em backup e reiniciar setores e permissões vazios. Somente o Super-Admin terá acesso até novos cadastros.</label><button class="btn btn-outline-danger">Recuperar política de acesso</button>';
-
-            \Html::closeForm();
-
-            echo '</div></section>';
+            self::mostrarRecuperacao($url);
 
             return;
 
         }
 
-        $dados = $politica ?? ['versao' => 1, 'setores' => [], 'regras' => []];
+        $dados = $politica ?? ConfiguracaoDeVisibilidade::vazia();
 
-        echo '<section class="contas-cartao mt-3"><div class="contas-cabecalho"><h2>Setores e permissões</h2></div><div class="contas-corpo">';
+        echo '<section class="contas-cartao mt-3"><div class="contas-cabecalho"><h2>Setores e vínculos de perfil</h2></div><div class="contas-corpo">';
 
-        echo '<p>Super-Admin vê todos os chamados permitidos pelo GLPI e configura o plugin. Administrador de setor vê somente grupos responsáveis dos setores concedidos. Técnico vê somente chamados atribuídos individualmente a ele.</p><p>Permissões por usuário, grupo ou perfil ativo são cumulativas. A concessão administrativa prevalece e fica restrita aos setores escolhidos. Nenhuma regra concede direitos nativos que o GLPI não permita.</p>';
+        echo '<p>Os direitos são definidos em Administração → Perfis → ADManagement. Este mapa apenas limita quais setores um perfil com supervisão pode atender. Grupos identificam o responsável atribuído ao chamado e não concedem acesso aos integrantes.</p>';
 
-        // A transição não transforma grupos antigos em administradores e só é ativada por salvamento explícito.
+        echo '<p>O superadministrador nativo vê todos os chamados permitidos nas entidades selecionadas e configura o plugin. O supervisor vê somente os setores vinculados. O técnico com permissão de operação vê somente suas atribuições individuais.</p>';
 
-        if ($politica === null) {
+        self::mostrarSetores($url, $politica, $dados);
 
-            echo '<div class="alert alert-warning">Política nova ainda não ativada. O acesso anterior continua como técnico. Ao salvar o primeiro setor ou regra, somente as novas concessões valerão; o Super-Admin mantém acesso. Os parâmetros anteriores serão preservados em backup.</div>';
+        self::mostrarVinculos($url, $politica, $dados);
+
+        self::mostrarFormularioSetor($url, $politica, self::obterEdicao($dados['setores'], $_GET['editar_setor'] ?? null));
+
+        self::mostrarFormularioPerfil($url, $politica, $dados, self::obterEdicao($dados['regras'], $_GET['editar_regra'] ?? null));
+
+        echo '</div></section>';
+
+    }
+
+    /**
+
+     * Distingue migração recuperável de reinicialização de um documento corrompido.
+
+     */
+
+    private static function mostrarRecuperacao(string $url): void {
+
+        $migracao = null;
+
+        try {
+
+            $migracao = ConfiguracaoDeVisibilidade::consultarMigracao();
+
+        } catch (\DomainException | \InvalidArgumentException $erro) {
+
+            // Um documento sem estrutura recuperável exige reinicialização explícita do mapa.
+
+            $migracao = null;
 
         }
 
-        echo '<h3>Setores cadastrados</h3><div class="table-responsive"><table class="table"><thead><tr><th>Setor</th><th>Grupos responsáveis</th><th>Entidades</th><th>Ações</th></tr></thead><tbody>';
+        echo '<section class="contas-cartao mt-3"><div class="contas-corpo"><h2>Atualizar controle por perfil</h2>';
 
-        // Os grupos responsáveis são atores atribuídos; não são o setor de lotação descrito no formulário.
+        // A prévia informa precisamente quais dados sobreviverão à migração confirmada.
+
+        if ($migracao !== null) {
+
+            echo '<p class="alert alert-warning">Há uma configuração anterior. A operação permanece bloqueada até a confirmação. Serão preservados ' . count($migracao['setores']) . ' setores e ' . count($migracao['regras']) . ' vínculos administrativos de perfil. Concessões por usuário ou grupo e papéis técnicos antigos não serão convertidos.</p>';
+
+            echo '<p>Setores preservados: ' . htmlescape(implode(', ', array_column($migracao['setores'], 'nome'))) . '.</p>';
+
+            $confirmacao = 'Confirmo preservar o documento anterior em backup e migrar somente os setores e vínculos de perfil apresentados. Nenhuma permissão nativa será concedida automaticamente.';
+
+        } else {
+
+            // A recuperação mantém o original em backup, sem usar permissões parciais.
+
+            echo '<p class="alert alert-danger">O mapa está inválido e não pode ser migrado com segurança. Confirme para preservar o documento original em backup e iniciar um mapa vazio. Direitos nativos de operação continuarão sujeitos às entidades do GLPI; supervisores precisam de novos vínculos.</p>';
+
+            $confirmacao = 'Confirmo preservar o documento anterior em backup e iniciar um mapa de setores vazio.';
+
+        }
+
+        echo '<form method="post" action="' . htmlescape($url) . '">';
+
+        echo \Html::hidden('acao_configuracao', ['value' => 'restaurar_visibilidade']);
+
+        echo \Html::hidden('revisao_documento', ['value' => ConfiguracaoDeVisibilidade::assinaturaDoDocumento()]);
+
+        echo '<label><input type="checkbox" name="confirmar_restauracao" value="1" required> ' . htmlescape($confirmacao) . '</label><button class="btn btn-primary">Confirmar atualização do mapa</button>';
+
+        \Html::closeForm();
+
+        echo '</div></section>';
+
+    }
+
+    /**
+
+     * Lista setores responsáveis sem tratar associação de grupo como permissão.
+
+     */
+
+    private static function mostrarSetores(string $url, ?array $politica, array $dados): void {
+
+        echo '<h3>Setores cadastrados</h3><div class="table-responsive"><table class="table"><thead><tr><th>Setor</th><th>Grupos atribuídos</th><th>Entidades</th><th>Ações</th></tr></thead><tbody>';
+
+        // Os grupos permanecem pareados às entidades de cada setor cadastrado.
 
         foreach ($dados['setores'] as $setor) {
 
-            echo '<tr><td>' . htmlescape($setor['nome']) . '</td><td>' . htmlescape(self::nomes('grupo', $setor['grupos_ids'])) . '</td><td>' . htmlescape(self::nomes('entidade', $setor['entidades_ids'])) . '</td><td><a href="' . htmlescape($url . '?editar_setor=' . $setor['id']) . '">Editar</a>';
+            echo '<tr><td>' . htmlescape($setor['nome']) . '</td><td>' . htmlescape(self::nomes(\Group::class, $setor['grupos_ids'])) . '</td><td>' . htmlescape(self::nomes(\Entity::class, $setor['entidades_ids'])) . '</td><td><a href="' . htmlescape($url . '?editar_setor=' . $setor['id']) . '">Editar</a>';
 
             self::mostrarExclusao($url, $politica, 'setores', $setor['id']);
 
@@ -64,29 +132,29 @@ final class ApresentacaoDaVisibilidade {
 
         }
 
-        echo '</tbody></table></div><h3>Concessões de acesso</h3><div class="table-responsive"><table class="table"><thead><tr><th>Origem e destinatário</th><th>Papel</th><th>Setores</th><th>Entidades</th><th>Estado</th><th>Ações</th></tr></thead><tbody>';
+        echo '</tbody></table></div>';
 
-        // Apresenta concessões individuais lado a lado com grupos e perfis, incluindo regras inativas.
+    }
+
+    /**
+
+     * Lista somente vínculos de perfil, mantendo os direitos na matriz oficial.
+
+     */
+
+    private static function mostrarVinculos(string $url, ?array $politica, array $dados): void {
+
+        $nomes = array_column($dados['setores'], 'nome', 'id');
+
+        echo '<h3>Perfis e setores supervisionados</h3><div class="table-responsive"><table class="table"><thead><tr><th>Perfil ativo</th><th>Setores</th><th>Entidades</th><th>Estado</th><th>Ações</th></tr></thead><tbody>';
+
+        // Um mapa existente não habilita o perfil sem seu direito nativo de supervisão.
 
         foreach ($dados['regras'] as $regra) {
 
-            $nomes_setores = [];
+            $selecionados = array_intersect_key($nomes, array_flip($regra['setores_ids']));
 
-            // Traduz os IDs setoriais sem buscar dados de chamados ou rascunhos.
-
-            foreach ($dados['setores'] as $setor) {
-
-                // Mostra somente setores efetivamente concedidos pela regra desta linha.
-
-                if (in_array($setor['id'], $regra['setores_ids'], true)) {
-
-                    $nomes_setores[] = $setor['nome'];
-
-                }
-
-            }
-
-            echo '<tr><td>' . htmlescape(ucfirst($regra['origem']) . ': ' . self::nomes($regra['origem'], [$regra['alvo_id']])) . '</td><td>' . ($regra['papel'] === 'tecnico' ? 'Técnico' : 'Administrador de setor') . '</td><td>' . htmlescape(implode(', ', $nomes_setores)) . '</td><td>' . htmlescape(self::nomes('entidade', $regra['entidades_ids'])) . '</td><td>' . ($regra['ativa'] ? 'Ativa' : 'Inativa') . '</td><td><a href="' . htmlescape($url . '?editar_regra=' . $regra['id']) . '">Editar</a>';
+            echo '<tr><td>' . htmlescape(self::nomes(\Profile::class, [$regra['alvo_id']])) . '</td><td>' . htmlescape(implode(', ', $selecionados)) . '</td><td>' . htmlescape(self::nomes(\Entity::class, $regra['entidades_ids'])) . '</td><td>' . ($regra['ativa'] ? 'Ativo' : 'Inativo') . '</td><td><a href="' . htmlescape($url . '?editar_regra=' . $regra['id']) . '">Editar</a>';
 
             self::mostrarExclusao($url, $politica, 'regras', $regra['id']);
 
@@ -96,9 +164,15 @@ final class ApresentacaoDaVisibilidade {
 
         echo '</tbody></table></div>';
 
-        $setor = self::obterEdicao($dados['setores'], $_GET['editar_setor'] ?? null);
+    }
 
-        $regra = self::obterEdicao($dados['regras'], $_GET['editar_regra'] ?? null);
+    /**
+
+     * Edita a identificação dos responsáveis pelos chamados, sem expandir grupos ou entidades.
+
+     */
+
+    private static function mostrarFormularioSetor(string $url, ?array $politica, array $setor): void {
 
         echo '<h3>' . ($setor === [] ? 'Cadastrar setor' : 'Editar setor #' . $setor['id']) . '</h3>';
 
@@ -106,77 +180,57 @@ final class ApresentacaoDaVisibilidade {
 
         echo '<label class="form-label">Nome do setor<input class="form-control" name="nome_setor" maxlength="200" required value="' . htmlescape($setor['nome'] ?? '') . '"></label>';
 
-        self::mostrarSeletor('Grupos responsáveis pelos chamados', \Group::class, 'grupos_ids[]', $setor['grupos_ids'] ?? []);
+        self::mostrarSeletor('Grupos atribuídos aos chamados', \Group::class, 'grupos_ids[]', $setor['grupos_ids'] ?? []);
 
         self::mostrarSeletor('Entidades do setor', \Entity::class, 'entidades_ids[]', $setor['entidades_ids'] ?? []);
 
-        echo '<p>Seleção exata: não inclui subgrupos nem entidades filhas automaticamente. Use o grupo em Atribuído do chamado.</p><button class="btn btn-primary">Salvar setor</button>';
+        echo '<p>Seleção exata: subgrupos e entidades filhas precisam ser selecionados explicitamente. Use o grupo apresentado em Atribuído no chamado.</p><button class="btn btn-primary">Salvar setor</button>';
 
         \Html::closeForm();
-
-        echo '<hr><h3>' . ($regra === [] ? 'Conceder permissão' : 'Editar permissão #' . $regra['id']) . '</h3>';
-
-        self::abrirFormulario($url, $politica, 'regras', $regra['id'] ?? null);
-
-        echo '<label class="form-label">Conceder por<select class="form-select" name="origem">';
-
-        // A origem determina qual dos três seletores será considerado no servidor.
-
-        foreach (['usuario' => 'Usuário individual', 'grupo' => 'Grupo GLPI', 'perfil' => 'Perfil ativo'] as $valor => $rotulo) {
-
-            echo '<option value="' . $valor . '"' . (($regra['origem'] ?? 'usuario') === $valor ? ' selected' : '') . '>' . $rotulo . '</option>';
-
-        }
-
-        echo '</select></label><p>Preencha o destinatário correspondente à origem. Os outros seletores não concedem acesso.</p><label class="form-label">Usuário individual</label>';
-
-        \User::dropdown(['name' => 'usuario_id', 'value' => ($regra['origem'] ?? '') === 'usuario' ? $regra['alvo_id'] : 0, 'right' => 'all', 'entity' => \Session::getActiveEntities(), 'entity_sons' => false, 'width' => '100%', 'ldap_import' => false]);
-
-        // Grupos e perfis usam catálogos nativos sem criar novos registros.
-
-        foreach (['grupo' => \Group::class, 'perfil' => \Profile::class] as $origem => $classe) {
-
-            echo '<label class="form-label">' . ucfirst($origem) . '</label>';
-
-            \Dropdown::show($classe, ['name' => $origem . '_id', 'value' => ($regra['origem'] ?? '') === $origem ? $regra['alvo_id'] : 0, 'addicon' => false, 'width' => '100%']);
-
-        }
-
-        echo '<label class="form-label">Papel<select class="form-select" name="papel"><option value="tecnico">Técnico — somente atribuição pessoal</option><option value="administrador_setor"' . (($regra['papel'] ?? '') === 'administrador_setor' ? ' selected' : '') . '>Administrador dos setores selecionados</option></select></label><label class="form-label">Setores administrados<select class="form-select" name="setores_ids[]" multiple>';
-
-        // A escolha setorial é obrigatória somente para o administrador; técnicos não recebem setores.
-
-        foreach ($dados['setores'] as $item) {
-
-            echo '<option value="' . $item['id'] . '"' . (in_array($item['id'], $regra['setores_ids'] ?? [], true) ? ' selected' : '') . '>' . htmlescape($item['nome']) . '</option>';
-
-        }
-
-        echo '</select></label><p>Para Técnico, deixe os setores vazios. Para Administrador de setor, escolha ao menos um.</p>';
-
-        self::mostrarSeletor('Entidades em que esta concessão vale', \Entity::class, 'entidades_ids[]', $regra['entidades_ids'] ?? []);
-
-        echo '<label class="form-check"><input class="form-check-input" type="checkbox" name="ativa" value="1"' . (($regra['ativa'] ?? true) ? ' checked' : '') . '> Permissão ativa</label><button class="btn btn-primary">Salvar permissão</button>';
-
-        \Html::closeForm();
-
-        echo '<p class="mt-3">Exemplo: usuário escolhido → Administrador de setor → Rede. Esse usuário verá os chamados atribuídos aos grupos do setor Rede, mesmo quando outro técnico estiver responsável. Usuário escolhido → Técnico verá somente suas atribuições individuais. O perfil Super-Admin dispensa estes cadastros.</p></div></section>';
 
     }
 
     /**
-     * Recupera o cadastro de edição; ID desconhecido não cria um cadastro implícito.
+
+     * Edita o alcance setorial de um perfil central sem duplicar sua concessão de direitos.
+
      */
 
-    private static function obterEdicao(
+    private static function mostrarFormularioPerfil(string $url, ?array $politica, array $dados, array $regra): void {
 
-        array $lista,
+        echo '<hr><h3>' . ($regra === [] ? 'Vincular perfil aos setores' : 'Editar vínculo #' . $regra['id']) . '</h3>';
 
-        mixed $id
+        self::abrirFormulario($url, $politica, 'regras', $regra['id'] ?? null);
 
-    ): array {
+        echo '<label class="form-label">Perfil supervisor</label>';
 
-        // Ausência do parâmetro representa cadastro novo e não uma edição.
+        \Dropdown::show(\Profile::class, ['name' => 'perfil_id', 'value' => $regra['alvo_id'] ?? 0, 'condition' => ['interface' => 'central'], 'addicon' => false, 'width' => '100%']);
+
+        echo '<label class="form-label">Setores supervisionados</label>';
+
+        // Diferente de Dropdown::show, showFromArray acrescenta os colchetes da seleção múltipla.
+
+        \Dropdown::showFromArray('setores_ids', array_column($dados['setores'], 'nome', 'id'), ['values' => $regra['setores_ids'] ?? [], 'multiple' => true, 'width' => '100%']);
+
+        self::mostrarSeletor('Entidades em que o vínculo vale', \Entity::class, 'entidades_ids[]', $regra['entidades_ids'] ?? []);
+
+        echo '<label class="form-check"><input class="form-check-input" type="checkbox" name="ativa" value="1"' . (($regra['ativa'] ?? true) ? ' checked' : '') . '> Vínculo ativo</label><button class="btn btn-primary">Salvar vínculo de perfil</button>';
+
+        echo '<p>Exemplo: perfil Supervisor de Rede, com supervisão habilitada no GLPI, vinculado ao setor Rede. Um perfil com apenas operação pessoal não utiliza estes vínculos.</p>';
+
+        \Html::closeForm();
+
+    }
+
+    /**
+
+     * Resolve uma edição somente por ID já presente no documento validado.
+
+     */
+
+    private static function obterEdicao(array $lista, mixed $id): array {
+
+        // Ausência do parâmetro representa um cadastro novo.
 
         if ($id === null) {
 
@@ -186,11 +240,11 @@ final class ApresentacaoDaVisibilidade {
 
         $identificador = EntradaDaFerramenta::lerIdentificador($id);
 
-        // Procura somente no documento administrativo já validado.
+        // A página não recebe dados administrativos diretamente dos parâmetros GET.
 
         foreach ($lista as $item) {
 
-            // Devolve a linha correspondente sem aceitar dados de formulário por GET.
+            // Somente um cadastro existente pode ser editado.
 
             if ($item['id'] === $identificador) {
 
@@ -205,40 +259,32 @@ final class ApresentacaoDaVisibilidade {
     }
 
     /**
-     * Abre um formulário independente, incluindo a versão que evita sobrescrita de aba antiga.
+
+     * Abre um formulário com revisão explícita para impedir sobrescritas de abas antigas.
+
      */
 
-    private static function abrirFormulario(
+    private static function abrirFormulario(string $url, ?array $politica, string $tipo, ?int $id): void {
 
-        string $url,
+        echo '<form method="post" action="' . htmlescape($url) . '">';
 
-        ?array $politica,
+        echo \Html::hidden('acao_configuracao', ['value' => 'salvar_visibilidade']);
 
-        string $tipo,
+        echo \Html::hidden('tipo_cadastro', ['value' => $tipo]);
 
-        ?int $id
+        echo \Html::hidden('cadastro_id', ['value' => $id ?? '']);
 
-    ): void {
-
-        echo '<form method="post" action="' . htmlescape($url) . '"><input type="hidden" name="acao_configuracao" value="salvar_visibilidade"><input type="hidden" name="tipo_cadastro" value="' . $tipo . '"><input type="hidden" name="cadastro_id" value="' . ($id ?? '') . '"><input type="hidden" name="revisao_politica" value="' . ConfiguracaoDeVisibilidade::assinatura($politica) . '">';
+        echo \Html::hidden('revisao_politica', ['value' => ConfiguracaoDeVisibilidade::assinatura($politica)]);
 
     }
 
     /**
-     * Exige confirmação explícita para excluir somente o cadastro administrativo da linha.
+
+     * Exige confirmação explícita para excluir somente o cadastro apresentado.
+
      */
 
-    private static function mostrarExclusao(
-
-        string $url,
-
-        ?array $politica,
-
-        string $tipo,
-
-        int $id
-
-    ): void {
+    private static function mostrarExclusao(string $url, ?array $politica, string $tipo, int $id): void {
 
         self::abrirFormulario($url, $politica, $tipo, $id);
 
@@ -249,20 +295,12 @@ final class ApresentacaoDaVisibilidade {
     }
 
     /**
-     * Compartilha opções seguras de seletores múltiplos sem duplicar a marcação dos catálogos.
+
+     * Reutiliza os seletores múltiplos nativos sem criar catálogos paralelos.
+
      */
 
-    private static function mostrarSeletor(
-
-        string $rotulo,
-
-        string $classe,
-
-        string $nome,
-
-        array $valores
-
-    ): void {
+    private static function mostrarSeletor(string $rotulo, string $classe, string $nome, array $valores): void {
 
         echo '<label class="form-label">' . htmlescape($rotulo) . '</label>';
 
@@ -271,22 +309,16 @@ final class ApresentacaoDaVisibilidade {
     }
 
     /**
-     * Traduz os IDs com modelos nativos e leitura por recurso, escapando os nomes na saída.
+
+     * Resolve rótulos pelos modelos do GLPI e mantém recursos indisponíveis identificáveis.
+
      */
 
-    private static function nomes(
-
-        string $origem,
-
-        array $ids
-
-    ): string {
-
-        $classe = match ($origem) {'usuario' => \User::class, 'grupo' => \Group::class, 'perfil' => \Profile::class, 'entidade' => \Entity::class};
+    private static function nomes(string $classe, array $ids): string {
 
         $nomes = [];
 
-        // Um item removido permanece identificável sem expor conteúdo de recurso negado.
+        // A leitura por recurso também se aplica aos nomes dos catálogos.
 
         foreach ($ids as $id) {
 
@@ -301,4 +333,3 @@ final class ApresentacaoDaVisibilidade {
     }
 
 }
-

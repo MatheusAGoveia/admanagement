@@ -3,13 +3,13 @@
 namespace GlpiPlugin\Admanagement;
 
 /**
- * Apresenta atendimentos reais da equipe e mantém o histórico distinto da auditoria.
+ * Apresenta a equipe autorizada usando os rótulos, datas e links nativos do GLPI.
  */
 
 final class PaginaDaEquipe {
 
     /**
-     * Autoriza o contexto e aplica o filtro de técnico somente dentro da equipe permitida.
+     * Consulta os atendimentos permitidos e organiza os filtros, a tabela e a navegação.
      */
 
     public static function mostrar(
@@ -24,9 +24,9 @@ final class PaginaDaEquipe {
 
         $configuracao = ConfiguracaoDaFila::consultar();
 
-        $tecnico = isset($_GET['tecnico']) && $_GET['tecnico'] !== '' && $_GET['tecnico'] !== '0' ? EntradaDaFerramenta::lerIdentificador($_GET['tecnico']) : null;
+        $tecnico = null;
 
-        $pagina = isset($_GET['pagina']) ? EntradaDaFerramenta::lerIdentificador($_GET['pagina']) : 1;
+        $pagina = 1;
 
         $resultado = [
 
@@ -42,13 +42,21 @@ final class PaginaDaEquipe {
 
         try {
 
+            // Ausência, vazio e zero representam a consulta de todo o escopo autorizado.
+
+            if (isset($_GET['tecnico']) && $_GET['tecnico'] !== '' && $_GET['tecnico'] !== '0') {
+
+                $tecnico = EntradaDaFerramenta::lerIdentificador($_GET['tecnico']);
+
+            }
+
+            $pagina = isset($_GET['pagina']) ? EntradaDaFerramenta::lerIdentificador($_GET['pagina']) : 1;
+
             $resultado = (new AcompanhamentoDaEquipe($DB))->consultar(
 
                 $contexto,
 
                 $configuracao['categorias_itil'],
-
-                $configuracao['grupos_permitidos'],
 
                 $tecnico,
 
@@ -58,7 +66,7 @@ final class PaginaDaEquipe {
 
             );
 
-        } catch (\DomainException $falha) {
+        } catch (\DomainException | \InvalidArgumentException $falha) {
 
             // Mostra filtros ou páginas recusados como entrada inválida da consulta da equipe.
 
@@ -90,9 +98,7 @@ final class PaginaDaEquipe {
 
             $tela,
 
-            AcessoGlpi::podeConfigurar(),
-
-            AcessoGlpi::estaComAcessoTemporarioParaTestes()
+            AcessoGlpi::podeConfigurar()
 
         );
 
@@ -110,57 +116,123 @@ final class PaginaDaEquipe {
 
         }
 
-        echo '<p>' . htmlescape(PoliticaDeVisibilidade::descrever($contexto)) . '</p><form method="get" action="' . htmlescape($url) . '"><label class="form-label">Técnico atribuído</label>';
+        echo '<p>' . htmlescape(PoliticaDeVisibilidade::descrever($contexto)) . '</p>';
 
-        // O Super-Admin usa o catálogo nativo, respeitando as entidades ativas do seu alcance.
+        self::mostrarFiltro($contexto, $resultado['tecnicos'], $tecnico, $url);
+
+        self::mostrarChamados($resultado['chamados']);
+
+        self::mostrarPaginacao($url, $pagina, $tecnico, $resultado['tem_proxima']);
+
+        echo '</div></section>';
+
+        InterfaceDaFerramenta::mostrarFim();
+
+        \Html::footer();
+
+    }
+
+    /**
+     * Apresenta o catálogo nativo ao superadministrador e as opções autorizadas aos demais perfis.
+     */
+
+    private static function mostrarFiltro(
+
+        array $contexto,
+
+        array $tecnicos,
+
+        ?int $tecnico,
+
+        string $url
+
+    ): void {
+
+        echo '<form method="get" action="' . htmlescape($url) . '">';
+
+        // O catálogo geral respeita as entidades ativas do perfil superadministrador.
 
         if (($contexto['visibilidade']['papel'] ?? '') === 'super_administrador') {
 
-            \User::dropdown(['name' => 'tecnico', 'value' => $tecnico ?? 0, 'right' => 'all', 'entity' => $contexto['visibilidade']['entidades_ids'], 'entity_sons' => false, 'width' => '100%', 'ldap_import' => false]);
+            echo '<label class="form-label">Técnico atribuído</label>';
+
+            \User::dropdown([
+
+                'name' => 'tecnico',
+
+                'value' => $tecnico ?? 0,
+
+                'right' => 'all',
+
+                'entity' => $contexto['visibilidade']['entidades_ids'],
+
+                'entity_sons' => false,
+
+                'width' => '100%',
+
+                'ldap_import' => false
+
+            ]);
 
         } else {
 
-            // Os demais papéis selecionam somente integrantes do alcance já autorizado.
+            // A seleção filtra um alcance já autorizado e nunca concede acesso a outro setor.
 
-            echo '<select name="tecnico" id="tecnico" class="form-select"><option value="">Todo o meu escopo</option>';
+            echo '<label class="form-label" for="dropdown_tecnico_admanagement">Técnico atribuído</label>';
 
-            // Os técnicos disponíveis no filtro nunca substituem o pareamento entre setor e entidade.
+            \Dropdown::showFromArray(
 
-            foreach ($resultado['tecnicos'] as $id => $nome) {
+                'tecnico',
 
-                echo '<option value="' . (int) $id . '"' . ($tecnico === (int) $id ? ' selected' : '') . '>' . htmlescape($nome) . '</option>';
+                ['' => 'Todo o meu escopo'] + $tecnicos,
 
-            }
+                [
 
-            echo '</select>';
+                    'value' => $tecnico === null ? '' : (string) $tecnico,
 
-        }
+                    'rand' => '_admanagement',
 
-        echo '<button class="btn btn-primary my-2">Aplicar filtro</button></form><p>'
+                    'width' => '100%',
 
-            . count($resultado['chamados'])
+                    'noselect2' => true
 
-            . ' chamado(s) visíveis nesta página. O estado do chamado não comprova efeito no AD.</p>';
-
-        echo '<div class="table-responsive"><table class="table"><thead><tr><th>Chamado</th><th>Título</th><th>Estado</th><th>Atualização</th></tr></thead><tbody>';
-
-        // Apresenta cada chamado visível com seu estado real no GLPI.
-
-        foreach ($resultado['chamados'] as $chamado) {
-
-            $status = (int) $chamado['status'] === \Ticket::CLOSED ? 'Fechado' : (
-
-                (int) $chamado['status'] === \Ticket::SOLVED ? 'Solucionado' : 'Em atendimento'
+                ]
 
             );
 
-            global $CFG_GLPI;
+        }
 
-            $ticket_url = rtrim($CFG_GLPI['root_doc'] ?? '', '/') . '/front/ticket.form.php?id=' . (int) $chamado['id'];
+        echo '<button class="btn btn-primary my-2">Aplicar filtro</button></form>';
+
+    }
+
+    /**
+     * Mostra os chamados reais com os nomes de estado, links e formato de data mantidos pelo GLPI.
+     */
+
+    private static function mostrarChamados(
+
+        array $chamados
+
+    ): void {
+
+        echo '<p>' . count($chamados) . ' chamado(s) visíveis nesta página. O estado do chamado não comprova efeito no AD.</p>';
+
+        echo '<div class="table-responsive"><table class="table"><thead><tr><th>Chamado</th><th>Título</th><th>Estado</th><th>Atualização</th></tr></thead><tbody>';
+
+        // O próprio GLPI resolve o formulário e traduz cada estado conforme o idioma da sessão.
+
+        foreach ($chamados as $chamado) {
+
+            $url_chamado = \Ticket::getFormURLWithID((int) $chamado['id']);
+
+            $estado = (string) \Ticket::getStatus((int) $chamado['status']);
+
+            $atualizacao = (string) \Html::convDateTime($chamado['date_mod']);
 
             echo '<tr><td><a href="'
 
-                . htmlescape($ticket_url)
+                . htmlescape($url_chamado)
 
                 . '">#'
 
@@ -172,11 +244,11 @@ final class PaginaDaEquipe {
 
                 . '</td><td>'
 
-                . htmlescape($status)
+                . htmlescape($estado)
 
                 . '</td><td>'
 
-                . htmlescape($chamado['date_mod'])
+                . htmlescape($atualizacao)
 
                 . '</td></tr>';
 
@@ -184,67 +256,62 @@ final class PaginaDaEquipe {
 
         // Informa que nenhum atendimento ficou visível no recorte selecionado.
 
-        if ($resultado['chamados'] === []) {
+        if ($chamados === []) {
 
             echo '<tr><td colspan="4">Nenhum atendimento encontrado no recorte autorizado.</td></tr>';
 
         }
 
-        echo '</tbody></table></div><nav aria-label="Páginas da equipe">';
+        echo '</tbody></table></div>';
+
+    }
+
+    /**
+     * Preserva o filtro do técnico e oferece somente as páginas existentes da consulta.
+     */
+
+    private static function mostrarPaginacao(
+
+        string $url,
+
+        int $pagina,
+
+        ?int $tecnico,
+
+        bool $tem_proxima
+
+    ): void {
+
+        echo '<nav aria-label="Páginas da equipe">';
 
         $filtro = $tecnico === null ? '' : '&tecnico=' . $tecnico;
 
-        // Oferece retorno à página anterior preservando o filtro de técnico.
+        // A primeira página não possui uma página anterior disponível.
 
         if ($pagina > 1) {
 
             echo '<a class="btn btn-outline-secondary" href="'
 
-                . htmlescape(
-
-                    $url
-
-                        . '?pagina='
-
-                        . ($pagina - 1)
-
-                        . $filtro
-
-                )
+                . htmlescape($url . '?pagina=' . ($pagina - 1) . $filtro)
 
                 . '">Anterior</a> ';
 
         }
 
-        // Oferece a próxima página somente quando a consulta encontrou registros adicionais.
+        // O serviço consulta um registro adicional para comprovar que a próxima página existe.
 
-        if ($resultado['tem_proxima']) {
+        if ($tem_proxima) {
 
             echo '<a class="btn btn-outline-secondary" href="'
 
-                . htmlescape(
-
-                    $url
-
-                        . '?pagina='
-
-                        . ($pagina + 1)
-
-                        . $filtro
-
-                )
+                . htmlescape($url . '?pagina=' . ($pagina + 1) . $filtro)
 
                 . '">Próxima</a>';
 
         }
 
-        echo '</nav></div></section>';
-
-        InterfaceDaFerramenta::mostrarFim();
-
-        \Html::footer();
+        echo '</nav>';
 
     }
 
 }
-

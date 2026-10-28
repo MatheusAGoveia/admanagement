@@ -11,6 +11,12 @@ use InvalidArgumentException;
 final class EntradaDaFerramenta {
 
     /**
+     * Reúne a orientação apresentada quando um texto viola o contrato dos formulários.
+     */
+
+    private const MENSAGEM_TEXTO_INVALIDO = 'Há um campo com formato ou tamanho inválido. Revise os dados enviados.';
+
+    /**
      * Aceita somente um identificador positivo, sem converter arrays, booleanos ou texto parcial.
      */
 
@@ -20,25 +26,11 @@ final class EntradaDaFerramenta {
 
     ): int {
 
-        // Strings precisam ter o formato exato de um ID; inteiros seguem para o filtro.
+        // Aceita inteiros ou texto decimal estrito; o curto-circuito impede testar arrays como texto.
 
-        if (!is_int($valor)) {
+        if (!is_int($valor) && (!is_string($valor) || !preg_match('/^[1-9][0-9]*$/D', $valor))) {
 
-            // Rejeita arrays, booleanos e outros tipos antes de validar o formato decimal do identificador.
-
-            if (!is_string($valor)) {
-
-                throw new InvalidArgumentException('O identificador informado é inválido.');
-
-            }
-
-            // A expressão aceita somente dígitos, começando de 1 a 9.
-
-            if (!preg_match('/^[1-9][0-9]*$/D', $valor)) {
-
-                throw new InvalidArgumentException('O identificador informado é inválido.');
-
-            }
+            throw new InvalidArgumentException('O identificador informado é inválido.');
 
         }
 
@@ -55,6 +47,58 @@ final class EntradaDaFerramenta {
         // A conversão só acontece depois de todas as verificações.
 
         return (int) $valor;
+
+    }
+
+    /**
+     * Normaliza uma lista de identificadores positivos e admite a entidade raiz quando solicitado.
+     */
+
+    public static function lerListaDeIdentificadores(
+
+        mixed $valores,
+
+        bool $permitir_raiz = false
+
+    ): array {
+
+        // Os controles múltiplos nativos enviam texto vazio quando nenhuma opção foi selecionada.
+
+        if ($valores === '') {
+
+            return [];
+
+        }
+
+        // Rejeita valores escalares e mapas associativos antes de percorrer os identificadores.
+
+        if (!is_array($valores) || !array_is_list($valores)) {
+
+            throw new InvalidArgumentException('A lista de identificadores informada é inválida.');
+
+        }
+
+        $identificadores = [];
+
+        // Cada item segue a mesma validação estrita de identificador utilizada nas demais entradas.
+
+        foreach ($valores as $valor) {
+
+            // A entidade raiz usa zero, permitido somente quando o chamador solicita esse alcance.
+
+            if ($permitir_raiz && ($valor === 0 || $valor === '0')) {
+
+                $identificadores[] = 0;
+
+                continue;
+
+            }
+
+            $identificadores[] = self::lerIdentificador($valor);
+
+        }
+
+        return array_values(array_unique($identificadores));
 
     }
 
@@ -76,7 +120,7 @@ final class EntradaDaFerramenta {
 
         if (!is_string($valor)) {
 
-            throw new InvalidArgumentException('Há um campo com formato ou tamanho inválido. Revise os dados enviados.');
+            throw new InvalidArgumentException(self::MENSAGEM_TEXTO_INVALIDO);
 
         }
 
@@ -84,7 +128,7 @@ final class EntradaDaFerramenta {
 
         if (strlen($valor) > $limite) {
 
-            throw new InvalidArgumentException('Há um campo com formato ou tamanho inválido. Revise os dados enviados.');
+            throw new InvalidArgumentException(self::MENSAGEM_TEXTO_INVALIDO);
 
         }
 
@@ -92,7 +136,7 @@ final class EntradaDaFerramenta {
 
         if (preg_match('//u', $valor) !== 1) {
 
-            throw new InvalidArgumentException('Há um campo com formato ou tamanho inválido. Revise os dados enviados.');
+            throw new InvalidArgumentException(self::MENSAGEM_TEXTO_INVALIDO);
 
         }
 
@@ -100,21 +144,15 @@ final class EntradaDaFerramenta {
 
         if (preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $valor)) {
 
-            throw new InvalidArgumentException('Há um campo com formato ou tamanho inválido. Revise os dados enviados.');
+            throw new InvalidArgumentException(self::MENSAGEM_TEXTO_INVALIDO);
 
         }
 
-        // Campos de uma linha não podem conter quebras de linha nem tabulações.
+        // Recusa quebras de linha e tabulações somente nos campos definidos como uma única linha.
 
-        if (!$multilinha) {
+        if (!$multilinha && preg_match('/[\r\n\t]/', $valor)) {
 
-            // Recusa quebras de linha e tabulações em campos definidos como uma única linha.
-
-            if (preg_match('/[\r\n\t]/', $valor)) {
-
-                throw new InvalidArgumentException('Há um campo com formato ou tamanho inválido. Revise os dados enviados.');
-
-            }
+            throw new InvalidArgumentException(self::MENSAGEM_TEXTO_INVALIDO);
 
         }
 

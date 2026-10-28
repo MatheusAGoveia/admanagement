@@ -8,6 +8,8 @@ use GlpiPlugin\Admanagement\AcessoGlpi;
 
 use GlpiPlugin\Admanagement\MenuDaFerramenta;
 
+use GlpiPlugin\Admanagement\PerfilDaFerramenta;
+
 // A descoberta não deve encerrar a requisição do GLPI nem alterar seu status HTTP.
 
 if (!defined('GLPI_ROOT') || basename(__DIR__) !== 'admanagement') {
@@ -30,6 +32,10 @@ if (!function_exists('plugin_version_admanagement')) {
     function plugin_init_admanagement(): void {
 
         global $PLUGIN_HOOKS;
+
+        // O GLPI apresenta e persiste os direitos na edição nativa dos perfis.
+
+        Plugin::registerClass(PerfilDaFerramenta::class, ['addtabon' => Profile::class]);
 
         // O hook associa a seção de plugins à classe que monta o menu autorizado.
 
@@ -64,7 +70,7 @@ if (!function_exists('plugin_version_admanagement')) {
 
             'name' => 'ADManagement',
 
-            'version' => '0.6.0',
+            'version' => '0.7.0',
 
             'author' => 'MatheusAGoveia',
 

@@ -76,9 +76,9 @@ final class FormularioDaSolicitacao {
 
                 . $chamado['itilcategories_id']
 
-                . ' · Estado #'
+                . ' · Estado: '
 
-                . $chamado['status']
+                . htmlescape((string) \Ticket::getStatus((int) $chamado['status']))
 
                 . '</p>';
 
@@ -94,7 +94,7 @@ final class FormularioDaSolicitacao {
 
                 echo '<form method="post" action="' . htmlescape($url_revisao) . '">';
 
-                echo '<input type="hidden" name="chamado_id" value="' . $chamado_id . '">';
+                echo Html::hidden('chamado_id', ['value' => $chamado_id]);
 
                 echo '<button class="btn btn-outline-primary btn-sm w-100" name="acao" value="importar">Importar / continuar revisão</button>';
 
@@ -334,29 +334,31 @@ final class FormularioDaSolicitacao {
 
         ];
 
-        echo '<label class="form-label" for="usar_nome_social">Uso de nome social não determinado na origem</label>';
+        echo '<label class="form-label" for="dropdown_usar_nome_social_admanagement">Uso de nome social não determinado na origem</label>';
 
-        echo '<select class="form-select mb-3" id="usar_nome_social" name="usar_nome_social">';
+        // O helper nativo escapa os rótulos e mantém os valores vazio, zero e um distintos.
 
-        // Apresenta as opções pendente, nome civil e nome social no seletor de revisão.
+        \Dropdown::showFromArray(
 
-        foreach ($opcoes as $valor => $rotulo) {
+            'usar_nome_social',
 
-            $atributo_selecionado = '';
+            $opcoes,
 
-            // Marca somente a opção correspondente ao valor atual da indicação de nome.
+            [
 
-            if ((string) $valor === $selecionado) {
+                'value' => $selecionado,
 
-                $atributo_selecionado = ' selected';
+                'rand' => '_admanagement',
 
-            }
+                'class' => 'form-select mb-3',
 
-            echo '<option value="' . $valor . '"' . $atributo_selecionado . '>' . $rotulo . '</option>';
+                'width' => '100%',
 
-        }
+                'noselect2' => true
 
-        echo '</select>';
+            ]
+
+        );
 
     }
 
@@ -393,13 +395,13 @@ final class FormularioDaSolicitacao {
 
         echo '<form method="post" action="' . htmlescape($url_revisao) . '">';
 
-        echo '<input type="hidden" name="chamado_id" value="' . $chamado_id . '">';
+        echo Html::hidden('chamado_id', ['value' => $chamado_id]);
 
         // Exige confirmação de substituição quando o técnico está reimportando um rascunho corrigido.
 
         if ($rascunho !== null) {
 
-            echo '<input type="hidden" name="revisao" value="' . $rascunho['revisao'] . '">';
+            echo Html::hidden('revisao', ['value' => $rascunho['revisao']]);
 
             echo '<label class="form-check mb-3"><input class="form-check-input" type="checkbox" name="confirmar_reimportacao" value="1" required> Confirmo substituir minhas correções pelos dados atuais da origem.</label>';
 
@@ -539,23 +541,21 @@ final class FormularioDaSolicitacao {
 
             // Usa campo de uma linha para textos que não admitem quebras de linha.
 
-            echo '<input class="form-control" id="'
+            echo Html::input(
 
-                . $campo
+                $campo,
 
-                . '" name="'
+                [
 
-                . $campo
+                    'id' => $campo,
 
-                . '" maxlength="'
+                    'maxlength' => $limite,
 
-                . $limite
+                    'value' => $valor
 
-                . '" value="'
+                ]
 
-                . htmlescape($valor)
-
-                . '">';
+            );
 
         }
 
@@ -575,9 +575,9 @@ final class FormularioDaSolicitacao {
 
         // Campos ocultos transportam o ID e a revisão; não substituem a conferência no servidor.
 
-        echo '<input type="hidden" name="chamado_id" value="' . $rascunho['chamado_id'] . '">';
+        echo Html::hidden('chamado_id', ['value' => $rascunho['chamado_id']]);
 
-        echo '<input type="hidden" name="revisao" value="' . $rascunho['revisao'] . '">';
+        echo Html::hidden('revisao', ['value' => $rascunho['revisao']]);
 
     }
 

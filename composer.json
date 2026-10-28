@@ -21,10 +21,12 @@
         "test:carregamento": "php tests/carregamento.php",
         "test:refatoracao": "php tests/refatoracao.php",
         "test:fluxo": "php tests/fluxo.php",
+        "test:fluxo_perfis": "php tests/fluxo_perfis.php",
         "test:regras_http": "php tests/regras_http.php",
         "test:regras_vigentes": "php tests/regras_vigentes.php",
         "test:concorrencia": "php tests/concorrencia.php",
         "test:documentacao": "php tests/documentacao.php",
-        "test:visibilidade": "php tests/visibilidade.php"
+        "test:visibilidade": "php tests/visibilidade.php",
+        "test:consultas_nativas": "php tests/consultas_nativas.php"
     }
 }

@@ -15,7 +15,7 @@ if (!defined('GLPI_ROOT') || basename(__DIR__) !== 'admanagement') {
 if (!function_exists('plugin_admanagement_install')) {
 
     /**
-     * Conclui a instalação inicial sem tabelas, direitos concedidos ou alterações externas.
+     * Registra os direitos nativos sem conceder permissões ou modificar dados externos.
      *
      * O nome e a assinatura deste ponto de entrada são contratos do GLPI e precisam ser
      * preservados.
@@ -23,9 +23,11 @@ if (!function_exists('plugin_admanagement_install')) {
 
     function plugin_admanagement_install(): bool {
 
-        // A instalação atual somente confere os requisitos já declarados no setup.
+        // A chave é criada sem valores concedidos; cada perfil exige configuração explícita.
 
-        return plugin_admanagement_check_prerequisites();
+        return plugin_admanagement_check_prerequisites()
+
+            && \GlpiPlugin\Admanagement\PerfilDaFerramenta::registrarDireito();
 
     }
 

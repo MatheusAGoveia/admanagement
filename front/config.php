@@ -8,8 +8,6 @@ use GlpiPlugin\Admanagement\EnderecoDaFerramenta;
 
 use GlpiPlugin\Admanagement\MenuDaFerramenta;
 
-use GlpiPlugin\Admanagement\ConfiguracaoOperacional;
-
 use GlpiPlugin\Admanagement\ConfiguracaoDoDiretorio;
 
 use GlpiPlugin\Admanagement\ApresentacaoDaConfiguracao;
@@ -19,6 +17,8 @@ use Glpi\Exception\RedirectException;
 use GlpiPlugin\Admanagement\ConfiguracaoDaFila;
 
 use GlpiPlugin\Admanagement\ConfiguracaoDeVisibilidade;
+
+use GlpiPlugin\Admanagement\ApresentacaoDaVisibilidade;
 
 use GlpiPlugin\Admanagement\InterfaceDaFerramenta;
 
@@ -58,12 +58,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             ConfiguracaoDeVisibilidade::restaurar($_POST);
 
-        } elseif ($acao_configuracao === 'salvar_acesso') {
-
-            // O endpoint legado continua validado, mas não altera a política nova nem concede setores.
-
-            ConfiguracaoOperacional::salvarAcesso($_POST);
-
         } elseif ($acao_configuracao === 'salvar_diretorio') {
 
             // Salva os parâmetros da conexão de leitura, sem testar a rede ou gravar no AD.
@@ -72,13 +66,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         } elseif ($acao_configuracao === 'salvar_fila') {
 
-            // Altera categorias operacionais preservando os grupos anteriores para a transição.
+            // Categorias limitam a importação; os direitos continuam no perfil nativo.
 
-            $entrada_fila = $_POST;
-
-            $entrada_fila['grupos_permitidos'] = $configuracao['grupos_permitidos'];
-
-            ConfiguracaoDaFila::salvar($entrada_fila);
+            ConfiguracaoDaFila::salvar($_POST);
 
         } else {
 
@@ -142,9 +132,7 @@ InterfaceDaFerramenta::mostrarInicio(
 
     'configuracao',
 
-    true,
-
-    AcessoGlpi::estaComAcessoTemporarioParaTestes()
+    true
 
 );
 
@@ -152,7 +140,7 @@ InterfaceDaFerramenta::mostrarInicio(
 <div class="contas-cartao contas-configuracao">
     <div class="contas-cabecalho"><h2>Configuração do ADManagement</h2></div>
     <div class="contas-corpo">
-            <p>Somente o Super-Admin configura setores, concessões e critérios operacionais.</p>
+            <p>O superadministrador configura o vínculo dos perfis com setores e as categorias operacionais. Os direitos são definidos em Administração → Perfis → ADManagement.</p>
             <?php
 
             // Apresenta o erro de configuração somente quando a ação anterior falhou.
@@ -210,7 +198,11 @@ InterfaceDaFerramenta::mostrarInicio(
 </div>
 <?php
 
-ApresentacaoDaConfiguracao::mostrarAcesso(EnderecoDaFerramenta::raiz() . '/front/config.php');
+ApresentacaoDaConfiguracao::mostrarAcesso();
+
+// O mapa relaciona perfis aos setores; as capacidades continuam na matriz nativa de direitos.
+
+ApresentacaoDaVisibilidade::mostrar(EnderecoDaFerramenta::raiz() . '/front/config.php');
 
 ApresentacaoDaConfiguracao::mostrarDiretorios(EnderecoDaFerramenta::raiz() . '/front/config.php');
 

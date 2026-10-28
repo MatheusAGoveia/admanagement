@@ -8,6 +8,8 @@ use GlpiPlugin\Admanagement\{
 
     ConfiguracaoOperacional,
 
+    ConfiguracaoDaFila,
+
     DestinoDaOperacao,
 
     NomeDistinto,
@@ -133,6 +135,82 @@ class Group_Ticket {
     public static function getTable(): string {
 
         return 'glpi_groups_tickets';
+
+    }
+
+}
+
+/**
+
+ * Fornece o nome da tabela nativa usada na seleção de usuários ativos.
+
+ */
+
+class User {
+
+    /**
+
+     * Identifica a tabela de usuários sem abrir conexão ou consultar catálogos reais.
+
+     */
+
+    public static function getTable(): string {
+
+        return 'glpi_users';
+
+    }
+
+}
+
+/**
+
+ * Reproduz o catálogo nativo de integrantes somente com técnicos sintéticos.
+
+ */
+
+class Group_User {
+
+    public static array $consultas = [];
+
+    /**
+
+     * Captura os grupos dos setores e os filtros complementares encaminhados à API.
+
+     */
+
+    public static function getGroupUsers(array $grupos, array $condicoes = []): array {
+
+        self::$consultas[] = [$grupos, $condicoes];
+
+        return [
+
+            ['id' => 9, 'name' => 'tecnico1', 'firstname' => 'Primeiro', 'realname' => 'Técnico'],
+
+            ['id' => 10, 'name' => 'tecnico2', 'firstname' => 'Segundo', 'realname' => 'Técnico'],
+
+        ];
+
+    }
+
+}
+
+/**
+
+ * Distingue o nome formatado pela API nativa da concatenação manual anterior.
+
+ */
+
+class DbUtils {
+
+    /**
+
+     * Fornece uma apresentação sintética reconhecível sem reproduzir as preferências do GLPI.
+
+     */
+
+    public function formatUserName($id, $login, $sobrenome, $nome): string {
+
+        return 'Nome nativo ' . $id;
 
     }
 
@@ -302,6 +380,16 @@ try {
 
     );
 
+    Config::$valores['grupos_e_categorias'] = json_encode(['categorias_itil' => [11, 12]]);
+
+    conferirRegra(
+
+        ConfiguracaoDaFila::consultar() === ['categorias_itil' => [11, 12]],
+
+        'a chave instalada preserva somente categorias operacionais, sem conceder acesso por grupo'
+
+    );
+
     $contexto = [
 
         'tecnico_id' => 9,
@@ -310,7 +398,15 @@ try {
 
         'entidade_id' => 2,
 
-        'grupos_ids' => [7]
+        'grupos_ids' => [7],
+
+        'entidades_ativas_ids' => [2],
+
+        'direitos_perfil' => ['operar' => true, 'administrar_setores' => false],
+
+        'visibilidade' => ['papel' => 'tecnico', 'entidades_ids' => [2], 'vinculos' => []],
+
+        'assinatura_visibilidade' => 'mapa-inicial',
 
     ];
 
@@ -778,9 +874,77 @@ try {
 
     );
 
+    $direito_revogado = array_replace($contexto, ['direitos_perfil' => ['operar' => false, 'administrar_setores' => false]]);
+
+    conferirRegra(
+
+        !RevisaoDaOperacao::continuaValida($preparado, $rascunho, $direito_revogado),
+
+        'revogação dos direitos do perfil invalida o resumo mesmo sem trocar o identificador do perfil'
+
+    );
+
+    recusarRegra(
+
+        /**
+
+         * O POST não pode reaproveitar um desafio preparado antes da revogação do perfil.
+
+         */
+
+        fn() => RevisaoDaOperacao::confirmar($preparado, $rascunho, $direito_revogado, $entrada),
+
+        'direitos revogados bloqueiam confirmação direta'
+
+    );
+
+    $mapa_alterado = array_replace($contexto, ['assinatura_visibilidade' => 'mapa-alterado']);
+
+    conferirRegra(
+
+        !RevisaoDaOperacao::continuaValida($preparado, $rascunho, $mapa_alterado),
+
+        'alterar a revisão do mapa de visibilidade invalida o resumo'
+
+    );
+
+    recusarRegra(
+
+        /**
+
+         * Uma edição de configuração invalida a confirmação mesmo com o perfil ainda ativo.
+
+         */
+
+        fn() => RevisaoDaOperacao::confirmar($preparado, $rascunho, $mapa_alterado, $entrada),
+
+        'mapa alterado bloqueia confirmação direta'
+
+    );
+
+    $grupos_informativos = array_replace($contexto, ['grupos_ids' => [99]]);
+
+    conferirRegra(
+
+        RevisaoDaOperacao::continuaValida($preparado, $rascunho, $grupos_informativos),
+
+        'mudança isolada dos grupos pessoais não altera a autorização por perfil nem invalida o resumo'
+
+    );
+
     $_SESSION = [];
 
     RepositorioDeRascunhos::guardarInicial($preparado);
+
+    RepositorioDeRascunhos::conferirContexto($grupos_informativos);
+
+    conferirRegra(
+
+        isset(RepositorioDeRascunhos::consultar(10, $contexto)['resumo']),
+
+        'a conferência persistida mantém o resumo quando somente os grupos informativos mudam'
+
+    );
 
     RepositorioDeRascunhos::invalidarConfirmacao(10, $contexto);
 
@@ -1332,19 +1496,7 @@ try {
 
             $this->consultas[] = $criterios;
 
-            return $criterios['FROM'] === 'glpi_users' ? [[
-
-                'id' => 9,
-
-                'name' => 'tecnico1'
-
-            ], [
-
-                'id' => 10,
-
-                'name' => 'tecnico2'
-
-            ]] : [
+            return [
 
                 ['id' => 1, 'status' => 5, 'entities_id' => 2, 'itilcategories_id' => 11],
 
@@ -1366,7 +1518,7 @@ try {
 
         12
 
-    ], [7], null, true);
+    ], null, true);
 
     $criterios = $banco->consultas[0];
 
@@ -1396,7 +1548,7 @@ try {
 
     );
 
-    $equipe->consultar($contexto, [11], [7], $contexto['tecnico_id'], false);
+    $equipe->consultar($contexto, [11], $contexto['tecnico_id'], false);
 
     conferirRegra(
 
@@ -1412,9 +1564,43 @@ try {
          * Executa a tentativa que deve ser recusada no cenário: filtro não concede equipe externa.
          */
 
-        fn() => $equipe->consultar($contexto, [11], [7], 99, false),
+        fn() => $equipe->consultar($contexto, [11], 99, false),
 
         'filtro não concede equipe externa'
+
+    );
+
+    $supervisor = array_replace($contexto, [
+
+        'direitos_perfil' => ['operar' => false, 'administrar_setores' => true],
+
+        'visibilidade' => [
+
+            'papel' => 'administrador_setor',
+
+            'entidades_ids' => [2],
+
+            'vinculos' => [['grupos_ids' => [6], 'entidades_ids' => [2]]],
+
+        ],
+
+    ]);
+
+    $equipe_do_setor = $equipe->consultar($supervisor, [], 10, true);
+
+    conferirRegra(
+
+        $equipe_do_setor['tecnicos'] === [9 => 'Nome nativo 9', 10 => 'Nome nativo 10'],
+
+        'a equipe usa integrantes e nomes apresentados pelas APIs nativas'
+
+    );
+
+    conferirRegra(
+
+        Group_User::$consultas[0] === [[6], ['glpi_users.is_deleted' => 0, 'glpi_users.is_active' => 1]],
+
+        'o catálogo usa os grupos atribuídos aos setores do perfil e exclui técnicos inativos ou removidos'
 
     );
 

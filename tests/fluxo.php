@@ -36,6 +36,90 @@ namespace {
 
     use Glpi\Exception\RedirectException;
 
+    /**
+     * Mantém o ancestral nativo usado pela aba de permissões do plugin.
+     */
+
+    class CommonGLPI {
+
+    }
+
+    /**
+     * Identifica administradores por capacidade nativa, independentemente do nome do perfil.
+     */
+
+    class Profile extends CommonGLPI {
+
+        /**
+         * Reserva o perfil sintético 40 para a administração global dos cenários.
+         */
+
+        public static function getSuperAdminProfilesId(): array {
+
+            return [40];
+
+        }
+
+        /**
+         * Devolve o endereço de administração dos perfis sem carregar o GLPI real.
+         */
+
+        public static function getSearchURL(): string {
+
+            return '/front/profile.php';
+
+        }
+
+    }
+
+    /**
+     * Reproduz o retrato tipado de identidade e entidades oferecido pela sessão nativa.
+     */
+
+    class SessaoDoFluxo {
+
+        /**
+         * Devolve somente a identidade conectada do cenário.
+         */
+
+        public function getUserId(): int {
+
+            return $_SESSION['glpiID'];
+
+        }
+
+        /**
+         * Devolve somente o perfil ativo, sem juntar perfis vinculados ao usuário.
+         */
+
+        public function getProfileId(): int {
+
+            return $_SESSION['glpiactiveprofile']['id'];
+
+        }
+
+        /**
+         * Devolve a seleção explícita das entidades nativas.
+         */
+
+        public function getActiveEntitiesIds(): array {
+
+            return $_SESSION['glpiactiveentities'];
+
+        }
+
+        /**
+         * Devolve a entidade ativa, mantendo a entidade raiz quando selecionada.
+         */
+
+        public function getCurrentEntityId(): int {
+
+            return $_SESSION['glpiactive_entity'];
+
+        }
+
+    }
+
     define('READ', 1);
 
     define('UPDATE', 2);
@@ -58,7 +142,7 @@ namespace {
 
         ): array {
 
-            $valores = ['grupos_e_categorias' => '{"grupos_permitidos":[7],"categorias_itil":[11]}'];
+            $valores = ['grupos_e_categorias' => '{"categorias_itil":[11]}'];
 
             // Cada requisição pode fornecer uma política nova inteiramente sintética.
 
@@ -68,7 +152,7 @@ namespace {
 
             }
 
-            return $valores;
+            return array_intersect_key($valores, array_flip($chaves));
 
         }
 
@@ -79,6 +163,17 @@ namespace {
      */
 
     class Session {
+
+        /**
+         * Entrega o retrato nativo apenas quando o cenário possui usuário conectado.
+         */
+
+        public static function getCurrentSessionInfo(): ?SessaoDoFluxo {
+
+            return self::getLoginUserID() ? new SessaoDoFluxo() : null;
+
+        }
+
 
         /**
          * Obtém o usuário definido pelo cenário.
@@ -136,9 +231,17 @@ namespace {
 
             $nivel
 
-        ): bool {
+        ): int|false {
 
-            return ($GLOBALS['cenario_do_fluxo']['configurar'] ?? false) === true;
+            // Configuração é uma capacidade administrativa separada do direito operacional.
+
+            if ($direito === 'config') {
+
+                return ($GLOBALS['cenario_do_fluxo']['configurar'] ?? false) ? $nivel : false;
+
+            }
+
+            return (((int) ($_SESSION['glpiactiveprofile'][$direito] ?? 0)) & $nivel) ?: false;
 
         }
 
@@ -262,6 +365,32 @@ namespace {
 
     class Ticket {
 
+        /**
+
+         * Identifica o estado do chamado usando o contrato nativo de apresentação.
+
+         */
+
+        public static function getStatus(int $estado): string {
+
+            return 'Estado sintético ' . $estado;
+
+        }
+
+        /**
+
+         * Constrói o destino sintético de abertura do chamado.
+
+         */
+
+        public static function getFormURLWithID(int $id): string {
+
+            return '/front/ticket.form.php?id=' . $id;
+
+        }
+
+
+
         public const SOLVED = 5;
 
         public const CLOSED = 6;
@@ -301,6 +430,44 @@ namespace {
      */
 
     class Html {
+
+        /**
+
+         * Reproduz o escape dos campos ocultos emitidos pelos formulários nativos.
+
+         */
+
+        public static function hidden(string $nome, array $opcoes): string {
+
+            return '<input type="hidden" name="' . htmlescape($nome) . '" value="' . htmlescape($opcoes['value']) . '">';
+
+        }
+
+        /**
+
+         * Mantém tipo e escape dos campos textuais gerados pelo helper nativo.
+
+         */
+
+        public static function input(string $nome, array $opcoes): string {
+
+            return '<input name="' . htmlescape($nome) . '" value="' . htmlescape($opcoes['value'] ?? '') . '">';
+
+        }
+
+        /**
+
+         * Retorna o instante sintético para verificar a renderização sem configuração regional externa.
+
+         */
+
+        public static function convDateTime(string $instante): string {
+
+            return $instante;
+
+        }
+
+
 
         /**
          * Marca o início da saída autorizada.
@@ -347,6 +514,52 @@ namespace {
         ): never {
 
             throw new RedirectException($url, 302);
+
+        }
+
+    }
+
+    /**
+     * Reproduz o seletor nativo de usuários nos testes da visão global.
+     */
+
+    /**
+     * Reproduz o seletor nativo sem consultas nem scripts de uma instalação real.
+     */
+
+    class Dropdown {
+
+        /**
+         * A API de catálogo preserva o nome recebido, inclusive os colchetes de seleção múltipla.
+         */
+
+        public static function show(string $classe, array $opcoes): void {
+
+            echo '<select name="' . htmlescape($opcoes['name']) . '"></select>';
+
+        }
+
+        /**
+
+         * Gera opções escapadas conforme a seleção sintética do cenário.
+
+         */
+
+        public static function showFromArray(string $nome, array $opcoes, array $configuracao): void {
+
+            $nome_campo = $nome . (!empty($configuracao['multiple']) ? '[]' : '');
+
+            echo '<select name="' . htmlescape($nome_campo) . '">';
+
+            // Cada opção mantém seu valor textual, inclusive a opção de revisão pendente.
+
+            foreach ($opcoes as $valor => $rotulo) {
+
+                echo '<option value="' . htmlescape($valor) . '"' . ((string) $valor === (string) ($configuracao['value'] ?? '') ? ' selected' : '') . '>' . htmlescape($rotulo) . '</option>';
+
+            }
+
+            echo '</select>';
 
         }
 
@@ -853,7 +1066,7 @@ namespace {
 
     }
 
-    // Somente a cópia temporária recebe permissões de teste; o config/acesso.php real é preservado.
+    // Toda autorização vem do perfil sintético; arquivos legados não concedem permissões.
 
     $verificacoes_do_fluxo = 0;
 
@@ -913,13 +1126,17 @@ namespace {
 
                     'id' => 4,
 
-                    'interface' => 'central'
+                    'interface' => 'central',
+
+                    'plugin_admanagement' => READ
 
                 ],
 
                 'glpigroups' => [7],
 
                 'glpiactive_entity' => 2,
+
+                'glpiactiveentities' => [2],
 
             ],
 
@@ -961,79 +1178,339 @@ namespace {
 
         ];
 
-        // Reproduz concessões novas nas entradas GET e POST reais, sem trocar direitos da instalação.
+        // Os cenários compartilham identidades, sem transformar seus mapas em concessões de direitos.
 
-        $politica_tecnica = ['versao' => 1, 'setores' => [], 'regras' => [[
-
-            'id' => 1, 'origem' => 'usuario', 'alvo_id' => 9, 'papel' => 'tecnico', 'setores_ids' => [], 'entidades_ids' => [2, 3], 'ativa' => true
-
-        ]]];
+        $politica_tecnica = ['versao' => 2, 'setores' => [], 'regras' => []];
 
         $individual = array_replace($base, ['visibilidade' => $politica_tecnica]);
 
-        $individual['sessao']['glpigroups'] = [];
+        $politica_setorial = [
 
-        conferirFluxo(executarEntrada($individual, $pasta)['codigo'] === 200, 'HTTP concessão por usuário sem grupo');
+            'versao' => 2,
 
-        $outro_atribuido = array_replace($individual, ['tecnico_atribuido' => 10, 'metodo' => 'POST', 'post' => ['chamado_id' => '1', 'acao' => 'importar']]);
+            'setores' => [['id' => 1, 'nome' => 'Rede', 'grupos_ids' => [6], 'entidades_ids' => [2]]],
 
-        $recusa_individual = executarEntrada($outro_atribuido, $pasta);
+            'regras' => [['id' => 1, 'origem' => 'perfil', 'alvo_id' => 4, 'setores_ids' => [1], 'entidades_ids' => [2], 'ativa' => true]],
 
-        conferirFluxo($recusa_individual['codigo'] === 403 && !isset($recusa_individual['sessao']['admanagement_rascunhos']), 'POST direto não importa chamado de outro técnico');
+        ];
 
-        $politica_setorial = $politica_tecnica;
+        $super_global = array_replace($individual, ['configurar' => true]);
 
-        $politica_setorial['setores'] = [['id' => 1, 'nome' => 'Rede', 'grupos_ids' => [6], 'entidades_ids' => [2]]];
+        $super_global['sessao']['glpiactiveprofile']['id'] = 40;
 
-        $politica_setorial['regras'][0]['papel'] = 'administrador_setor';
+        // Esta partição mantém as regressões de perfis separadas das demais requisições HTTP.
 
-        $politica_setorial['regras'][0]['setores_ids'] = [1];
+        if (($argv[1] ?? '') === '--perfis-nativos') {
 
-        $setorial = array_replace($outro_atribuido, ['visibilidade' => $politica_setorial, 'grupo_atribuido' => 6]);
+            // O direito nativo READ autoriza o técnico sem concessões pessoais ou participação em grupos.
 
-        conferirFluxo(executarEntrada($setorial, $pasta)['codigo'] === 302, 'administrador importa chamado do setor atribuído a outro técnico');
+            $politica_tecnica = ['versao' => 2, 'setores' => [], 'regras' => []];
 
-        $setorial['grupo_atribuido'] = 3;
+            $individual = array_replace($base, ['visibilidade' => $politica_tecnica]);
 
-        conferirFluxo(executarEntrada($setorial, $pasta)['codigo'] === 403, 'POST de administrador não ultrapassa setor');
+            $individual['sessao']['glpigroups'] = [];
 
-        $fora_categoria = array_replace($individual, ['tela' => 'index.php', 'get' => [], 'categoria_chamado' => 12]);
+            conferirFluxo(executarEntrada($individual, $pasta)['codigo'] === 200, 'HTTP direito do perfil ativo sem grupo');
 
-        $visivel_sem_importar = executarEntrada($fora_categoria, $pasta);
+            $outro_atribuido = array_replace($individual, ['tecnico_atribuido' => 10, 'metodo' => 'POST', 'post' => ['chamado_id' => '1', 'acao' => 'importar']]);
 
-        conferirFluxo($visivel_sem_importar['codigo'] === 200 && str_contains($visivel_sem_importar['html'], '#1') && str_contains($visivel_sem_importar['html'], 'Fora das categorias operacionais'), 'categoria não esconde chamado e explica impedimento');
+            $recusa_individual = executarEntrada($outro_atribuido, $pasta);
 
-        $fora_categoria['tela'] = 'revisao.php';
+            conferirFluxo($recusa_individual['codigo'] === 403 && !isset($recusa_individual['sessao']['admanagement_rascunhos']), 'POST direto não importa chamado de outro técnico');
 
-        $fora_categoria['metodo'] = 'POST';
+            $politica_setorial = $politica_tecnica;
 
-        $fora_categoria['post'] = ['chamado_id' => '1', 'acao' => 'importar'];
+            $politica_setorial['setores'] = [['id' => 1, 'nome' => 'Rede', 'grupos_ids' => [6], 'entidades_ids' => [2]]];
 
-        conferirFluxo(executarEntrada($fora_categoria, $pasta)['codigo'] === 409, 'POST mantém categoria operacional');
+            $politica_setorial['regras'] = [[
 
-        $filha = array_replace($individual, ['entidade_chamado' => 3, 'metodo' => 'POST', 'post' => ['chamado_id' => '1', 'acao' => 'importar']]);
+                'id' => 1,
 
-        $filha['sessao']['glpiactiveentities'] = [2, 3];
+                'origem' => 'perfil',
 
-        $filha['formularios'][0]['entities_id'] = '3';
+                'alvo_id' => 4,
 
-        $importacao_filha = executarEntrada($filha, $pasta);
+                'setores_ids' => [1],
 
-        conferirFluxo($importacao_filha['codigo'] === 302 && isset($importacao_filha['sessao']['admanagement_rascunhos'][9][3][1]), 'rascunho é guardado na entidade real do chamado filho');
+                'entidades_ids' => [2],
 
-        $filha['sessao'] = $importacao_filha['sessao'];
+                'ativa' => true,
 
-        $filha['metodo'] = 'GET';
+            ]];
 
-        $filha['post'] = [];
+            $setorial = array_replace($outro_atribuido, ['visibilidade' => $politica_setorial, 'grupo_atribuido' => 6]);
 
-        conferirFluxo(executarEntrada($filha, $pasta)['codigo'] === 200, 'reabre revisão na entidade filha autorizada');
+            $setorial['sessao']['glpiactiveprofile']['plugin_admanagement'] = UPDATE;
 
-        $super_global = array_replace($outro_atribuido, ['visibilidade' => ['versao' => 1, 'setores' => [], 'regras' => []], 'configurar' => true]);
+            conferirFluxo(executarEntrada($setorial, $pasta)['codigo'] === 302, 'administrador importa chamado do setor atribuído a outro técnico');
 
-        $super_global['sessao']['glpiactiveprofile']['name'] = 'Super-Admin';
+            $setorial['grupo_atribuido'] = 3;
 
-        conferirFluxo(executarEntrada($super_global, $pasta)['codigo'] === 302, 'Super-Admin importa sem atribuição pessoal e sem regras próprias');
+            conferirFluxo(executarEntrada($setorial, $pasta)['codigo'] === 403, 'POST de administrador não ultrapassa setor');
+
+            $fora_categoria = array_replace($individual, ['tela' => 'index.php', 'get' => [], 'categoria_chamado' => 12]);
+
+            $visivel_sem_importar = executarEntrada($fora_categoria, $pasta);
+
+            conferirFluxo($visivel_sem_importar['codigo'] === 200 && str_contains($visivel_sem_importar['html'], '#1') && str_contains($visivel_sem_importar['html'], 'Fora das categorias operacionais'), 'categoria não esconde chamado e explica impedimento');
+
+            $fora_categoria['tela'] = 'revisao.php';
+
+            $fora_categoria['metodo'] = 'POST';
+
+            $fora_categoria['post'] = ['chamado_id' => '1', 'acao' => 'importar'];
+
+            conferirFluxo(executarEntrada($fora_categoria, $pasta)['codigo'] === 409, 'POST mantém categoria operacional');
+
+            $filha = array_replace($individual, ['entidade_chamado' => 3, 'metodo' => 'POST', 'post' => ['chamado_id' => '1', 'acao' => 'importar']]);
+
+            $filha['sessao']['glpiactiveentities'] = [2, 3];
+
+            $filha['formularios'][0]['entities_id'] = '3';
+
+            $importacao_filha = executarEntrada($filha, $pasta);
+
+            conferirFluxo($importacao_filha['codigo'] === 302 && isset($importacao_filha['sessao']['admanagement_rascunhos'][9][3][1]), 'rascunho é guardado na entidade real do chamado filho');
+
+            $filha['sessao'] = $importacao_filha['sessao'];
+
+            $filha['metodo'] = 'GET';
+
+            $filha['post'] = [];
+
+            conferirFluxo(executarEntrada($filha, $pasta)['codigo'] === 200, 'reabre revisão na entidade filha autorizada');
+
+            // Preparar em entidade filha mantém o contexto ativo da sessão e a autoria na entidade real.
+
+            $preparo_filha = $filha;
+
+            $preparo_filha['metodo'] = 'POST';
+
+            $preparo_filha['post'] = ['chamado_id' => '1', 'acao' => 'preparar_resumo', 'revisao' => '1'];
+
+            $resumo_filha = executarEntrada($preparo_filha, $pasta);
+
+            conferirFluxo($resumo_filha['codigo'] === 302, 'prepara resumo do chamado em entidade filha');
+
+            $leitura_filha = $filha;
+
+            $leitura_filha['sessao'] = $resumo_filha['sessao'];
+
+            $resumo_reaberto = executarEntrada($leitura_filha, $pasta);
+
+            conferirFluxo(
+
+                $resumo_reaberto['codigo'] === 200
+
+                && isset($resumo_reaberto['sessao']['admanagement_rascunhos'][9][3][1]['resumo']['desafio'])
+
+                && $resumo_reaberto['sessao']['admanagement_rascunhos'][9][3][1]['revisao'] === 1,
+
+                'reabrir entidade filha não invalida resumo sem troca de contexto'
+
+            );
+
+            $confirmar_filha = $preparo_filha;
+
+            $confirmar_filha['sessao'] = $resumo_reaberto['sessao'];
+
+            $confirmar_filha['post'] = [
+
+                'chamado_id' => '1',
+
+                'acao' => 'confirmar_revisao',
+
+                'revisao' => '1',
+
+                'confirmar_revisao' => '1',
+
+                'desafio' => $resumo_filha['sessao']['admanagement_rascunhos'][9][3][1]['resumo']['desafio'],
+
+            ];
+
+            $filha_confirmada = executarEntrada($confirmar_filha, $pasta);
+
+            conferirFluxo(
+
+                $filha_confirmada['codigo'] === 302
+
+                && isset($filha_confirmada['sessao']['admanagement_rascunhos'][9][3][1]['confirmacao']),
+
+                'confirma resumo do chamado filho mantendo a entidade ativa original'
+
+            );
+
+            $troca_entidade = $leitura_filha;
+
+            $troca_entidade['sessao']['glpiactive_entity'] = 3;
+
+            $entidade_observada = executarEntrada($troca_entidade, $pasta);
+
+            conferirFluxo(
+
+                $entidade_observada['codigo'] === 200
+
+                && !isset($entidade_observada['sessao']['admanagement_rascunhos'][9][3][1]['resumo'])
+
+                && $entidade_observada['sessao']['admanagement_rascunhos'][9][3][1]['revisao'] === 2,
+
+                'troca real da entidade ativa invalida resumo mesmo quando o chamado continua autorizado'
+
+            );
+
+            $confirmar_filha['sessao'] = $entidade_observada['sessao'];
+
+            $confirmar_filha['sessao']['glpiactive_entity'] = 2;
+
+            conferirFluxo(
+
+                executarEntrada($confirmar_filha, $pasta)['codigo'] === 409,
+
+                'restaurar entidade ativa não recupera desafio invalidado'
+
+            );
+
+            $super_global = array_replace($outro_atribuido, ['visibilidade' => ['versao' => 2, 'setores' => [], 'regras' => []], 'configurar' => true]);
+
+            $super_global['sessao']['glpiactiveprofile']['name'] = 'Administrador renomeado';
+
+            $super_global['sessao']['glpiactiveprofile']['id'] = 40;
+
+            conferirFluxo(executarEntrada($super_global, $pasta)['codigo'] === 302, 'Super-Admin importa sem atribuição pessoal e sem regras próprias');
+
+            // Registra uma ação de outro ator para conferir a hierarquia da auditoria real da ferramenta.
+
+            $outro_ator = $setorial;
+
+            $outro_ator['grupo_atribuido'] = 6;
+
+            $outro_ator['sessao']['glpiID'] = 10;
+
+            conferirFluxo(executarEntrada($outro_ator, $pasta)['codigo'] === 302, 'outro ator autorizado registra evento sintético de auditoria');
+
+            $auditoria_setorial = array_replace($setorial, [
+
+                'tela' => 'audit.php',
+
+                'metodo' => 'GET',
+
+                'get' => [],
+
+                'post' => [],
+
+                'grupo_atribuido' => 6,
+
+            ]);
+
+            $eventos_do_setor = executarEntrada($auditoria_setorial, $pasta);
+
+            conferirFluxo(
+
+                $eventos_do_setor['codigo'] === 200 && str_contains($eventos_do_setor['html'], '<td>#10</td>'),
+
+                'administrador consulta eventos de outro ator somente no setor do perfil'
+
+            );
+
+            $auditoria_setorial['grupo_atribuido'] = 3;
+
+            $eventos_fora_do_setor = executarEntrada($auditoria_setorial, $pasta);
+
+            conferirFluxo(
+
+                $eventos_fora_do_setor['codigo'] === 200 && !str_contains($eventos_fora_do_setor['html'], '<td>#10</td>'),
+
+                'administrador não lê evento depois que chamado deixa o setor autorizado'
+
+            );
+
+            $auditoria_global = array_replace($super_global, ['tela' => 'audit.php', 'metodo' => 'GET', 'get' => [], 'post' => []]);
+
+            $eventos_globais = executarEntrada($auditoria_global, $pasta);
+
+            conferirFluxo(
+
+                $eventos_globais['codigo'] === 200 && str_contains($eventos_globais['html'], '<td>#10</td>'),
+
+                'superadministrador consulta eventos de outros atores dentro das entidades nativas'
+
+            );
+
+            $auditoria_pessoal = array_replace($individual, ['tela' => 'audit.php', 'get' => []]);
+
+            $eventos_pessoais = executarEntrada($auditoria_pessoal, $pasta);
+
+            conferirFluxo(
+
+                $eventos_pessoais['codigo'] === 200
+
+                && str_contains($eventos_pessoais['html'], '<td>#9</td>')
+
+                && !str_contains($eventos_pessoais['html'], '<td>#10</td>'),
+
+                'técnico consulta somente seus eventos nos chamados ainda atribuídos a ele'
+
+            );
+
+            $auditoria_pessoal['tecnico_atribuido'] = 10;
+
+            $eventos_reatribuidos = executarEntrada($auditoria_pessoal, $pasta);
+
+            conferirFluxo(
+
+                $eventos_reatribuidos['codigo'] === 200 && !str_contains($eventos_reatribuidos['html'], '<td>#9</td>'),
+
+                'perda de atribuição oculta evento pessoal apesar do direito nativo de leitura'
+
+            );
+
+            // A configuração precisa apresentar o mapa, além de orientar a edição dos direitos nativos.
+
+            $configuracao = array_replace($super_global, ['tela' => 'config.php', 'metodo' => 'GET', 'get' => [], 'post' => []]);
+
+            $mapa_visivel = executarEntrada($configuracao, $pasta);
+
+            conferirFluxo(
+
+                $mapa_visivel['codigo'] === 200
+
+                && str_contains($mapa_visivel['html'], 'name="perfil_id"')
+
+                && str_contains($mapa_visivel['html'], 'name="setores_ids[]"')
+
+                && !str_contains($mapa_visivel['html'], 'name="setores_ids[][]"'),
+
+                'configuração apresenta vínculo por perfil e seletor múltiplo plano'
+
+            );
+
+            $configuracao['visibilidade'] = ['versao' => 1, 'setores' => [], 'regras' => []];
+
+            $migracao_visivel = executarEntrada($configuracao, $pasta);
+
+            conferirFluxo(
+
+                $migracao_visivel['codigo'] === 200 && str_contains($migracao_visivel['html'], 'restaurar_visibilidade'),
+
+                'configuração permite confirmar migração sem ocultar o documento anterior'
+
+            );
+
+            // Parâmetros malformados precisam produzir erro de entrada, sem consulta ao banco.
+
+            foreach ([['tecnico' => 'abc'], ['pagina' => ['1']]] as $filtro_invalido) {
+
+                $filtro_recusado = executarEntrada(array_replace($super_global, ['tela' => 'overview.php', 'get' => $filtro_invalido]), $pasta);
+
+                conferirFluxo($filtro_recusado['codigo'] === 400 && $filtro_recusado['consultas'] === [], 'filtro malformado da equipe retorna 400 antes do banco');
+
+            }
+
+            echo $verificacoes_do_fluxo . ' verificações HTTP de perfis nativos concluídas.' . PHP_EOL;
+
+            return;
+
+        }
 
         $fila = executarEntrada(array_replace($base, [
 
@@ -1375,6 +1852,8 @@ namespace {
 
             $sem_perfil_revisado['sessao']['glpiactiveprofile']['id'] = 5;
 
+            $sem_perfil_revisado['sessao']['glpiactiveprofile']['plugin_admanagement'] = 0;
+
             $recusa_revisao = executarEntrada($sem_perfil_revisado, $pasta);
 
             conferirFluxo(
@@ -1388,6 +1867,8 @@ namespace {
             $confirmacao['sessao'] = $recusa_revisao['sessao'];
 
             $confirmacao['sessao']['glpiactiveprofile']['id'] = 4;
+
+            $confirmacao['sessao']['glpiactiveprofile']['plugin_admanagement'] = READ;
 
             conferirFluxo(
 
@@ -1601,6 +2082,8 @@ namespace {
 
         $perfil['sessao']['glpiactiveprofile']['id'] = 5;
 
+        $perfil['sessao']['glpiactiveprofile']['plugin_admanagement'] = 0;
+
         $sem_perfil = executarEntrada($perfil, $pasta);
 
         conferirFluxo(
@@ -1631,7 +2114,7 @@ namespace {
 
         );
 
-        // Liga a exceção só na cópia do teste e confirma seus limites nas entradas reais.
+        // Um arquivo legado de laboratório não pode conceder direitos ao perfil ativo.
 
         file_put_contents(
 
@@ -1643,13 +2126,13 @@ namespace {
 
         $temporario_liberado = executarEntrada($perfil, $pasta);
 
-        conferirFluxo($temporario_liberado['codigo'] === 200, 'exceção permite perfil fora da lista própria');
+        conferirFluxo($temporario_liberado['codigo'] === 403, 'exceção legada não autoriza perfil sem direitos');
 
         conferirFluxo(
 
-            str_contains($temporario_liberado['html'], 'Acesso temporário para testes'),
+            !str_contains($temporario_liberado['html'], 'Acesso temporário para testes'),
 
-            'aviso visível na revisão'
+            'não existe fluxo visual de acesso temporário'
 
         );
 
@@ -1659,7 +2142,7 @@ namespace {
 
         $sem_grupo_liberado = executarEntrada($sem_grupo, $pasta);
 
-        conferirFluxo($sem_grupo_liberado['codigo'] === 200, 'exceção permite contexto sem grupo');
+        conferirFluxo($sem_grupo_liberado['codigo'] === 200, 'perfil autorizado opera sem grupo');
 
         $direito_negado = executarEntrada(array_replace($base, ['leitura_permitida' => false]), $pasta);
 
@@ -1667,13 +2150,13 @@ namespace {
 
             $direito_negado['codigo'] === 403 && $direito_negado['html'] === '',
 
-            'exceção preserva leitura nativa'
+            'direito do perfil preserva leitura nativa'
 
         );
 
         $aprovacao_negada = executarEntrada($revogado, $pasta);
 
-        conferirFluxo($aprovacao_negada['codigo'] === 409, 'exceção não ignora aprovação da origem');
+        conferirFluxo($aprovacao_negada['codigo'] === 409, 'direito do perfil não ignora aprovação da origem');
 
         $overview_super = $super_global;
 

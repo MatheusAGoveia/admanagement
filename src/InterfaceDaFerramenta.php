@@ -18,9 +18,7 @@ final class InterfaceDaFerramenta {
 
         string $tela,
 
-        bool $pode_configurar,
-
-        bool $acesso_temporario
+        bool $pode_configurar
 
     ): void {
 
@@ -44,7 +42,7 @@ final class InterfaceDaFerramenta {
 
             $titulo = 'Configurações';
 
-            $subtitulo = 'Defina setores, permissões por usuário, grupo ou perfil e categorias operacionais.';
+            $subtitulo = 'Defina setores, permissões por perfil ativo e categorias operacionais.';
 
         }
 
@@ -83,18 +81,6 @@ final class InterfaceDaFerramenta {
         echo '<header class="contas-titulo"><h1>' . htmlescape($titulo) . '</h1>';
 
         echo '<p>' . htmlescape($subtitulo) . '</p></header>';
-
-        // Mostra o aviso de laboratório quando a exceção local de acesso está explicitamente ativa.
-
-        if ($acesso_temporario) {
-
-            // A exceção de testes continua visível e não afirma suspensão dos direitos nativos.
-
-            echo '<div class="contas-aviso contas-aviso-testes" role="status"><i class="ti ti-alert-triangle" aria-hidden="true"></i>';
-
-            echo '<div><strong>Acesso temporário para testes.</strong> Exceção local aplicável somente enquanto a política nova não foi ativada. Permissões nativas do GLPI continuam válidas.</div></div>';
-
-        }
 
         // Importar e salvar são ações de revisão local, sem escrita no AD ou no chamado.
 

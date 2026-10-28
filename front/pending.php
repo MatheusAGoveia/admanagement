@@ -46,9 +46,7 @@ InterfaceDaFerramenta::mostrarInicio(
 
     'pendencias',
 
-    AcessoGlpi::podeConfigurar(),
-
-    AcessoGlpi::estaComAcessoTemporarioParaTestes()
+    AcessoGlpi::podeConfigurar()
 
 );
 
@@ -98,7 +96,9 @@ try {
 
             !in_array($operacao['entidade_id'], $contexto['visibilidade']['entidades_ids'], true)
 
-            || $operacao['ator_id'] !== $contexto['tecnico_id']
+            || ($contexto['visibilidade']['papel'] === 'tecnico'
+
+                && $operacao['ator_id'] !== $contexto['tecnico_id'])
 
             || !$consulta_de_escopo->pertenceAoEscopo((int) $operacao['chamado_fixo'], $contexto)
 

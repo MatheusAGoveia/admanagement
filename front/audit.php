@@ -12,9 +12,17 @@ use GlpiPlugin\Admanagement\MenuDaFerramenta;
 
 use GlpiPlugin\Admanagement\RepositorioDeOperacoes;
 
+use GlpiPlugin\Admanagement\ConsultaDeChamados;
+
 require_once __DIR__ . '/../../../inc/includes.php';
 
 $contexto = AcessoGlpi::obterContextoDoTecnico();
+
+global $DB;
+
+$consulta_de_escopo = new ConsultaDeChamados($DB);
+
+$leitura_por_chamado = [];
 
 $registros = [];
 
@@ -50,13 +58,11 @@ InterfaceDaFerramenta::mostrarInicio(
 
     'auditoria',
 
-    AcessoGlpi::podeConfigurar(),
-
-    AcessoGlpi::estaComAcessoTemporarioParaTestes()
+    AcessoGlpi::podeConfigurar()
 
 );
 
-echo '<section class="contas-cartao"><div class="contas-cabecalho"><h2>Auditoria da ferramenta</h2></div><div class="contas-corpo"><p>Registros minimizados das suas ações. Acesso ampliado e retenção institucional ainda dependem de definição.</p>';
+echo '<section class="contas-cartao"><div class="contas-cabecalho"><h2>Auditoria da ferramenta</h2></div><div class="contas-corpo"><p>Registros minimizados no escopo do perfil ativo. Técnicos consultam suas ações; administradores acompanham os chamados dos setores autorizados.</p>';
 
 // Mostra o motivo que impediu a leitura da auditoria.
 
@@ -82,13 +88,15 @@ foreach (array_reverse($registros) as $registro) {
 
     }
 
-    // Regra restritiva enquanto os grupos de consulta de auditoria não forem definidos.
+    // O perfil técnico acompanha apenas suas ações; supervisores permanecem no seu escopo.
 
     if (
 
-        (int) $registro['entidade_id'] !== $contexto['entidade_id']
+        !in_array((int) $registro['entidade_id'], $contexto['visibilidade']['entidades_ids'], true)
 
-        || (int) $registro['ator_id'] !== $contexto['tecnico_id']
+        || ($contexto['visibilidade']['papel'] === 'tecnico'
+
+            && (int) $registro['ator_id'] !== $contexto['tecnico_id'])
 
     ) {
 
@@ -96,11 +104,19 @@ foreach (array_reverse($registros) as $registro) {
 
     }
 
-    $ticket = new Ticket();
+    $chamado_id = (int) $registro['chamado_id'];
 
-    // Oculta o evento quando o técnico não pode ler o chamado correspondente no GLPI.
+    // Reutiliza a decisão somente dentro desta requisição, sem repetir consultas do mesmo chamado.
 
-    if (!$ticket->can((int) $registro['chamado_id'], READ)) {
+    if (!array_key_exists($chamado_id, $leitura_por_chamado)) {
+
+        $leitura_por_chamado[$chamado_id] = $consulta_de_escopo->pertenceAoEscopo($chamado_id, $contexto);
+
+    }
+
+    // A leitura nativa isolada não basta após perda de atribuição ou mudança de setor.
+
+    if (!$leitura_por_chamado[$chamado_id]) {
 
         continue;
 

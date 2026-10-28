@@ -3,26 +3,24 @@
 namespace GlpiPlugin\Admanagement;
 
 /**
- * Resolve concessões positivas de usuário, grupo ou perfil sem consultar entradas HTTP.
+
+ * Combina direitos do perfil ativo com vínculos explícitos de setor e entidade.
+
  */
 
 final class PoliticaDeVisibilidade {
 
     /**
-     * Calcula o maior papel e mantém grupos e entidades pareados em cada setor autorizado.
+
+     * Preserva supervisão setorial, atribuição pessoal e administração nativa global.
+
      */
 
-    public static function resolver(
-
-        array $contexto,
-
-        array $configuracao
-
-    ): array {
+    public static function resolver(array $contexto, array $configuracao): array {
 
         $negado = ['papel' => 'negado', 'entidades_ids' => [], 'vinculos' => [], 'regras_ids' => []];
 
-        // Um contexto incompleto não pode conceder papel, mesmo com o indicador administrativo.
+        // Um perfil incompleto não recebe papel, mesmo com um indicador administrativo.
 
         if (!self::contextoValido($contexto)) {
 
@@ -30,9 +28,9 @@ final class PoliticaDeVisibilidade {
 
         }
 
-        $entidades = $contexto['entidades_ativas_ids'] ?? [$contexto['entidade_id']];
+        $entidades = $contexto['entidades_ativas_ids'];
 
-        // O adaptador GLPI fornece este indicador exclusivamente da sessão nativa.
+        // O adaptador fornece esta capacidade exclusivamente a partir do perfil nativo ativo.
 
         if (($contexto['super_administrador'] ?? false) === true) {
 
@@ -40,99 +38,41 @@ final class PoliticaDeVisibilidade {
 
         }
 
-        $setores = [];
+        $direitos = $contexto['direitos_perfil'] ?? [];
 
-        // Indexa os setores já validados para encontrar somente vínculos explícitos.
+        // A supervisão prevalece e nunca recua para atribuições pessoais fora dos setores.
 
-        foreach ($configuracao['setores'] ?? [] as $setor) {
+        if (($direitos['administrar_setores'] ?? false) === true) {
 
-            $setores[$setor['id']] = $setor;
+            $vinculos = self::resolverSetores($contexto, $configuracao);
+
+            // Um supervisor sem mapa válido permanece bloqueado.
+
+            if ($vinculos === []) {
+
+                return $negado;
+
+            }
+
+            return [
+
+                'papel' => 'administrador_setor',
+
+                'entidades_ids' => array_values(array_unique(array_merge(...array_column($vinculos, 'entidades_ids')))),
+
+                'vinculos' => $vinculos,
+
+                'regras_ids' => array_values(array_unique(array_column($vinculos, 'regra_id'))),
+
+            ];
 
         }
 
-        $entidades_tecnicas = [];
+        // O direito READ é suficiente para a fila pessoal, sem depender de grupos ou mapas.
 
-        $vinculos = [];
+        if (($direitos['operar'] ?? false) === true) {
 
-        $regras = [];
-
-        // Avalia todas as concessões; uma regra técnica nunca revoga uma concessão administrativa.
-
-        foreach ($configuracao['regras'] ?? [] as $regra) {
-
-            // Regras inativas ou destinadas a outra identidade não participam do escopo.
-
-            if (($regra['ativa'] ?? false) !== true || !self::corresponde($regra, $contexto)) {
-
-                continue;
-
-            }
-
-            $entidades_da_regra = array_values(array_intersect($entidades, $regra['entidades_ids']));
-
-            // Uma regra em outra entidade não libera entrada no contexto ativo.
-
-            if ($entidades_da_regra === []) {
-
-                continue;
-
-            }
-
-            $regras[] = $regra['id'];
-
-            // O técnico recebe somente as entidades explícitas de sua concessão pessoal.
-
-            if ($regra['papel'] === 'tecnico') {
-
-                $entidades_tecnicas = array_merge($entidades_tecnicas, $entidades_da_regra);
-
-                continue;
-
-            }
-
-            // Mantém cada setor junto de suas entidades para evitar cruzamento entre dois setores.
-
-            foreach ($regra['setores_ids'] as $id) {
-
-                $setor = $setores[$id] ?? null;
-
-                // Referência ausente nunca cria um setor ou concede todos os grupos.
-
-                if ($setor === null) {
-
-                    continue;
-
-                }
-
-                $entidades_do_setor = array_values(array_intersect($entidades_da_regra, $setor['entidades_ids']));
-
-                // Um setor sem entidade comum não participa da autorização.
-
-                if ($entidades_do_setor !== []) {
-
-                    $vinculos[] = ['setor_id' => $id, 'nome' => $setor['nome'], 'grupos_ids' => $setor['grupos_ids'], 'entidades_ids' => $entidades_do_setor];
-
-                }
-
-            }
-
-        }
-
-        // Administração prevalece e permanece limitada aos setores, inclusive sobre atribuições pessoais externas.
-
-        if ($vinculos !== []) {
-
-            $entidades_setoriais = array_merge(...array_column($vinculos, 'entidades_ids'));
-
-            return ['papel' => 'administrador_setor', 'entidades_ids' => array_values(array_unique($entidades_setoriais)), 'vinculos' => $vinculos, 'regras_ids' => $regras];
-
-        }
-
-        // Uma concessão técnica válida permite trabalhar apenas sobre atribuição individual.
-
-        if ($entidades_tecnicas !== []) {
-
-            return ['papel' => 'tecnico', 'entidades_ids' => array_values(array_unique($entidades_tecnicas)), 'vinculos' => [], 'regras_ids' => $regras];
+            return ['papel' => 'tecnico', 'entidades_ids' => $entidades, 'vinculos' => [], 'regras_ids' => []];
 
         }
 
@@ -141,50 +81,84 @@ final class PoliticaDeVisibilidade {
     }
 
     /**
-     * Compara o alvo ao usuário conectado, aos grupos atuais ou exclusivamente ao perfil ativo.
+
+     * Relaciona o perfil ativo aos setores sem cruzar grupos e entidades de vínculos diferentes.
+
      */
 
-    private static function corresponde(
+    private static function resolverSetores(array $contexto, array $configuracao): array {
 
-        array $regra,
+        // Documentos antigos nunca ativam concessões automaticamente.
 
-        array $contexto
+        if (($configuracao['versao'] ?? null) !== 2) {
 
-    ): bool {
+            return [];
 
-        return match ($regra['origem']) {
+        }
 
-            'usuario' => $regra['alvo_id'] === $contexto['tecnico_id'],
+        $setores = array_column($configuracao['setores'] ?? [], null, 'id');
 
-            'grupo' => in_array($regra['alvo_id'], $contexto['grupos_ids'], true),
+        $vinculos = [];
 
-            'perfil' => $regra['alvo_id'] === $contexto['perfil_id'],
+        // Somente vínculos ativos do perfil selecionado participam da supervisão.
 
-            // Origem desconhecida não corresponde a nenhuma identidade.
+        foreach ($configuracao['regras'] ?? [] as $regra) {
 
-            default => false,
+            // Campos antigos de usuário ou grupo são rejeitados mesmo em chamadas diretas.
 
-        };
+            if (($regra['ativa'] ?? false) !== true || ($regra['origem'] ?? null) !== 'perfil' || ($regra['alvo_id'] ?? null) !== $contexto['perfil_id']) {
+
+                continue;
+
+            }
+
+            // Cada setor mantém o próprio par de grupos responsáveis e entidades.
+
+            foreach ($regra['setores_ids'] as $setor_id) {
+
+                $setor = $setores[$setor_id] ?? null;
+
+                // Referências ausentes não significam acesso a todos os setores.
+
+                if ($setor === null) {
+
+                    continue;
+
+                }
+
+                $entidades = array_values(array_intersect($contexto['entidades_ativas_ids'], $regra['entidades_ids'], $setor['entidades_ids']));
+
+                // Uma entidade fora do mapa ou da seleção nativa não entra na consulta.
+
+                if ($entidades !== []) {
+
+                    $vinculos[] = ['setor_id' => $setor_id, 'nome' => $setor['nome'], 'grupos_ids' => $setor['grupos_ids'], 'entidades_ids' => $entidades, 'regra_id' => $regra['id']];
+
+                }
+
+            }
+
+        }
+
+        return $vinculos;
 
     }
 
     /**
-     * Recusa contexto adulterado antes de calcular qualquer concessão.
+
+     * Recusa identidade incompleta e escopo nativo vazio antes de autorizar consultas.
+
      */
 
-    public static function contextoValido(
+    public static function contextoValido(array $contexto): bool {
 
-        array $contexto
+        // Usuário e perfil são positivos; somente entidade aceita a raiz zero.
 
-    ): bool {
+        foreach (['tecnico_id' => 1, 'perfil_id' => 1, 'entidade_id' => 0] as $campo => $minimo) {
 
-        // Usuário e perfil devem ser inteiros positivos; a entidade raiz é explicitamente zero.
+            // Não converte valores parciais nem indicadores recebidos por formulário.
 
-        foreach (['tecnico_id', 'perfil_id', 'entidade_id'] as $campo) {
-
-            // Valores ausentes, negativos ou convertidos de texto não são contexto normalizado.
-
-            if (!isset($contexto[$campo]) || !is_int($contexto[$campo]) || $contexto[$campo] < ($campo === 'entidade_id' ? 0 : 1)) {
+            if (!isset($contexto[$campo]) || !is_int($contexto[$campo]) || $contexto[$campo] < $minimo) {
 
                 return false;
 
@@ -192,33 +166,25 @@ final class PoliticaDeVisibilidade {
 
         }
 
-        $listas = ['grupos_ids' => 1, 'entidades_ativas_ids' => 0];
+        $entidades = $contexto['entidades_ativas_ids'] ?? null;
 
-        // Confere todas as listas por inteiro, sem aproveitar fragmentos de um contexto inválido.
+        // A ausência de seleção não concede uma entidade padrão.
 
-        foreach ($listas as $campo => $minimo) {
+        if (!is_array($entidades) || !array_is_list($entidades) || $entidades === [] || !in_array($contexto['entidade_id'], $entidades, true)) {
 
-            $lista = $contexto[$campo] ?? ($campo === 'entidades_ativas_ids' ? [$contexto['entidade_id']] : null);
+            return false;
 
-            // Arrays associativos não são listas confiáveis de identidade ou escopo.
+        }
 
-            if (!is_array($lista) || !array_is_list($lista)) {
+        // Todo identificador precisa ser válido, mesmo quando não corresponde a um mapa.
+
+        foreach ($entidades as $id) {
+
+            // Uma entidade inválida compromete o contexto completo.
+
+            if (!is_int($id) || $id < 0) {
 
                 return false;
-
-            }
-
-            // Confere inclusive os IDs que não correspondem a uma regra atual.
-
-            foreach ($lista as $id) {
-
-                // Um único ID inválido recusa o contexto completo.
-
-                if (!is_int($id) || $id < $minimo) {
-
-                    return false;
-
-                }
 
             }
 
@@ -229,26 +195,24 @@ final class PoliticaDeVisibilidade {
     }
 
     /**
-     * Explica o papel efetivo para todas as telas que apresentam chamados.
+
+     * Explica o alcance efetivo sem apresentar grupos como concessões de acesso.
+
      */
 
-    public static function descrever(
+    public static function descrever(array $contexto): string {
 
-        array $contexto
-
-    ): string {
-
-        $escopo = $contexto['visibilidade'] ?? ['papel' => 'tecnico', 'entidades_ids' => [$contexto['entidade_id']], 'vinculos' => []];
+        $escopo = $contexto['visibilidade'] ?? ['papel' => 'negado', 'entidades_ids' => [], 'vinculos' => []];
 
         $rotulo = match ($escopo['papel']) {
 
-            'super_administrador' => 'Super-Admin: todos os chamados permitidos pelo GLPI',
+            'super_administrador' => 'Superadministrador: todos os chamados permitidos pelo GLPI',
 
             'administrador_setor' => 'Administrador de setor: ' . implode(', ', array_unique(array_column($escopo['vinculos'], 'nome'))),
 
             'tecnico' => 'Técnico: somente chamados atribuídos individualmente a você',
 
-            // Um papel recusado mantém a orientação explícita sem prometer acesso.
+            // Ausência de autorização nunca é apresentada como acesso técnico.
 
             default => 'Sem escopo autorizado',
 

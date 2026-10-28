@@ -4,6 +4,8 @@ namespace GlpiPlugin\Admanagement;
 
 use CommonITILActor;
 
+use DomainException;
+
 use Glpi\Exception\Http\AccessDeniedHttpException;
 
 use Group_Ticket;
@@ -13,36 +15,45 @@ use Ticket;
 use Ticket_User;
 
 /**
- * Consulta a fila respeitando categoria, entidade, atribuição e permissão de leitura.
+
+ * Reúne os filtros usados na fila, histórico e abertura por ID e exige a leitura nativa.
+
+ * Grupos identificam os setores atribuídos; a autorização vem do perfil resolvido no contexto.
+
  */
 
 final class ConsultaDeChamados {
 
-    // A tela e a consulta compartilham o mesmo limite de paginação.
+    // Limite compartilhado com os controles de navegação das telas.
 
     public const LIMITE_DE_PAGINAS = 100000;
 
-    // Quantidade máxima de registros da consulta exibidos em cada página.
+    // A paginação considera chamados que também passaram pela leitura nativa do GLPI.
 
     private const TAMANHO_DA_PAGINA = 25;
 
-    // readonly impede trocar a conexão depois de sua primeira definição.
+    // Lotes limitam a memória sem encerrar páginas por causa de registros ilegíveis.
 
-    private readonly object $banco;
+    private const TAMANHO_DO_LOTE = 100;
 
     /**
-     * Recebe a conexão que o bootstrap do GLPI já abriu, sem conexão paralela.
+
+     * Reutiliza a conexão já aberta pelo GLPI, sem conexão ou gravação paralela.
+
      */
 
-    public function __construct( object $banco )
-     {
+    public function __construct(
 
-        $this->banco = $banco;
+        private readonly object $banco
+
+    ) {
 
     }
 
     /**
-     * Lista somente chamados abertos atribuídos ao técnico ou a seus grupos, com paginação.
+
+     * Mostra a fila aberta; categorias operacionais limitam a importação em sua própria camada.
+
      */
 
     public function listar(
@@ -55,137 +66,161 @@ final class ConsultaDeChamados {
 
     ): array {
 
-        // Sem categorias habilitadas, a fila permanece vazia e nenhuma consulta é executada.
+        return $this->listarPagina($contexto, false, $pagina);
 
-        if ($categorias === []) {
+    }
 
-            return [
+    /**
 
-                'chamados' => [],
+     * Restringe o escopo pelos filtros opcionais e pagina somente chamados legíveis pelo GLPI.
 
-                'tem_proxima' => false
+     */
 
-            ];
+    public function listarPagina(
 
-        }
+        array $contexto,
 
-        $criterios = $this->montarCriterios($contexto, $categorias);
+        bool $historico,
 
-        // Um registro extra informa se há próxima página, sem contar todo o banco.
+        int $pagina = 1,
 
-        $criterios['LIMIT'] = self::TAMANHO_DA_PAGINA + 1;
+        ?int $tecnico = null,
 
-        // Limita o número da página ao intervalo aceito e calcula o deslocamento dos registros.
+        array $categorias_visuais = []
 
-        $pagina_consultada = $pagina;
+    ): array {
 
-        // Normaliza números inferiores à primeira página sem produzir deslocamento negativo.
+        // Recusa páginas inválidas antes de consultar ou calcular deslocamentos.
 
-        if ($pagina_consultada < 1) {
+        if ($pagina < 1 || $pagina > self::LIMITE_DE_PAGINAS) {
 
-            $pagina_consultada = 1;
-
-        }
-
-        // Interrompe consultas que ultrapassam o limite de paginação da ferramenta.
-
-        if ($pagina_consultada > self::LIMITE_DE_PAGINAS) {
-
-            $pagina_consultada = self::LIMITE_DE_PAGINAS;
+            throw new DomainException('Página fora do intervalo permitido.');
 
         }
 
-        $criterios['START'] = ($pagina_consultada - 1) * self::TAMANHO_DA_PAGINA;
+        $criterios = $this->montarCriterios($contexto, $historico);
 
-        // request devolve registros que podem ser percorridos com foreach.
+        // O filtro selecionado restringe a atribuição, preservando os setores e entidades.
 
-        $linhas = [];
+        if ($tecnico !== null) {
 
-        // Coleta os registros do banco, incluindo o item extra que indica próxima página.
-
-        foreach ($this->banco->request($criterios) as $linha) {
-
-            $linhas[] = $linha;
+            $criterios['WHERE']['AND'][] = [Ticket_User::getTable() . '.users_id' => $tecnico];
 
         }
 
-        // O registro extra só indica continuidade; ele não aparece nesta página.
+        // A seleção visual pode reduzir a lista sem ampliar sua autorização.
 
-        $tem_proxima = count($linhas) > self::TAMANHO_DA_PAGINA;
+        if ($categorias_visuais !== []) {
+
+            $criterios['WHERE'][Ticket::getTable() . '.itilcategories_id'] = $categorias_visuais;
+
+        }
+
+        $deslocamento_visivel = ($pagina - 1) * self::TAMANHO_DA_PAGINA;
+
+        $quantidade_visivel = 0;
+
+        $inicio_do_lote = 0;
 
         $chamados = [];
 
-        // Descarta o registro extra antes de verificar a leitura de cada chamado da página.
+        // Percorre candidatos em lotes até completar a página e encontrar um próximo item legível.
 
-        $linhas_da_pagina = array_slice($linhas, 0, self::TAMANHO_DA_PAGINA);
+        while (true) {
 
-        // Confere o direito nativo de leitura em cada item da página atual.
+            $criterios['START'] = $inicio_do_lote;
 
-        foreach ($linhas_da_pagina as $linha) {
+            $criterios['LIMIT'] = self::TAMANHO_DO_LOTE;
 
-            $ticket = new Ticket();
+            $quantidade_do_lote = 0;
 
-            $chamado_id = (int) $linha['id'];
+            // A leitura por recurso ocorre antes de contar posições da paginação visível.
 
-            // A atribuição não substitui os direitos nativos de leitura deste chamado.
+            foreach ($this->banco->request($criterios) as $linha) {
 
-            if ($ticket->can($chamado_id, READ)) {
+                $quantidade_do_lote++;
+
+                // Um registro ilegível não ocupa posição nem revela se há próxima página.
+
+                if (!(new Ticket())->can((int) $linha['id'], READ)) {
+
+                    continue;
+
+                }
+
+                $quantidade_visivel++;
+
+                // Ignora somente chamados legíveis pertencentes às páginas anteriores.
+
+                if ($quantidade_visivel <= $deslocamento_visivel) {
+
+                    continue;
+
+                }
+
+                // O item legível além do limite comprova a existência da próxima página.
+
+                if (count($chamados) === self::TAMANHO_DA_PAGINA) {
+
+                    return ['chamados' => $chamados, 'tem_proxima' => true];
+
+                }
 
                 $chamados[] = $this->normalizarChamado($linha);
 
             }
 
-        }
+            $inicio_do_lote += $quantidade_do_lote;
 
-        return [
+            // Um lote incompleto encerra os candidatos, inclusive quando nenhum é legível.
 
-            'chamados' => $chamados,
+            if ($quantidade_do_lote < self::TAMANHO_DO_LOTE) {
 
-            'tem_proxima' => $tem_proxima,
-
-        ];
-
-    }
-
-    /**
-     * Revalida o chamado também para URLs e POSTs diretos, antes de importar ou revisar.
-     */
-
-    public function consultar( int $chamado_id, array $contexto, array $categorias  ): array {
-
-        // Procura o chamado somente quando há categorias operacionais configuradas.
-
-        if ($categorias !== []) {
-
-            // A correção por técnico habilitado respeita categoria/entidade/recurso, sem impor atribuição pessoal.
-
-            $criterios = $this->montarCriterios($contexto, $categorias);
-
-            unset($criterios['WHERE']['OR'], $criterios['LEFT JOIN']);
-
-            $criterios['WHERE'][Ticket::getTable() . '.id'] = $chamado_id;
-
-            $criterios['LIMIT'] = 1;
-
-            // Examina o resultado do ID solicitado e exige leitura nativa antes de devolvê-lo.
-
-            foreach ($this->banco->request($criterios) as $linha) {
-
-                $ticket = new Ticket();
-
-                // Mesmo dentro da fila, o chamado exige permissão nativa de leitura.
-
-                if ($ticket->can($chamado_id, READ)) {
-
-                    return $this->normalizarChamado($linha);
-
-                }
+                break;
 
             }
 
         }
 
-        // Categorias vazias, ausência na fila ou falta de leitura resultam em acesso negado.
+        return ['chamados' => $chamados, 'tem_proxima' => false];
+
+    }
+
+    /**
+
+     * Revalida URLs e POSTs na fila aberta, preservando setor, atribuição e leitura nativa.
+
+     */
+
+    public function consultar(
+
+        int $chamado_id,
+
+        array $contexto,
+
+        array $categorias
+
+    ): array {
+
+        $criterios = $this->montarCriterios($contexto, false);
+
+        $criterios['WHERE']['AND'][] = [Ticket::getTable() . '.id' => $chamado_id];
+
+        $criterios['LIMIT'] = 1;
+
+        // Mantém o conjunto completo de filtros também na abertura direta por ID.
+
+        foreach ($this->banco->request($criterios) as $linha) {
+
+            // A leitura nativa continua obrigatória após o filtro de setor ou atribuição.
+
+            if ((new Ticket())->can($chamado_id, READ)) {
+
+                return $this->normalizarChamado($linha);
+
+            }
+
+        }
 
         RepositorioDeRascunhos::invalidarTodosDaSessao();
 
@@ -194,151 +229,194 @@ final class ConsultaDeChamados {
     }
 
     /**
-     * Monta os critérios com o papel de atribuição, sem confundir solicitante ou observador.
+
+     * Confere pendências no mesmo escopo, inclusive após o encerramento do chamado.
+
      */
 
-    private function montarCriterios( array $contexto, array $categorias ): array {
+    public function pertenceAoEscopo(
 
-        // Obtém os nomes das tabelas pelos modelos do GLPI.
+        int $chamado_id,
 
-        $tabela = Ticket::getTable();
+        array $contexto
 
-        $tabela_usuarios = Ticket_User::getTable();
+    ): bool {
 
-        $tabela_grupos = Group_Ticket::getTable();
+        $criterios = $this->montarCriterios($contexto, null);
 
-        // A atribuição direta ao técnico sempre participa do filtro.
+        $criterios['WHERE']['AND'][] = [Ticket::getTable() . '.id' => $chamado_id];
 
-        $atribuicao = [$tabela_usuarios . '.users_id' => $contexto['tecnico_id']];
+        $criterios['LIMIT'] = 1;
 
-        // Havendo grupos no contexto, aceita também chamados atribuídos a qualquer um deles.
+        // Confere somente a leitura dos metadados, sem autorizar nova execução.
 
-        if ($contexto['grupos_ids'] !== []) {
+        foreach ($this->banco->request($criterios) as $linha) {
 
-            $atribuicao[$tabela_grupos . '.groups_id'] = $contexto['grupos_ids'];
+            return (new Ticket())->can($chamado_id, READ);
 
         }
 
-        // SELECT indica os campos devolvidos; FROM indica a tabela principal.
-
-        $campos = [
-
-            'id',
-
-            'name',
-
-            'status',
-
-            'entities_id',
-
-            'itilcategories_id',
-
-            'date_mod'
-
-        ];
-
-        $criterios = [];
-
-        $criterios['SELECT'] = [$tabela => $campos];
-
-        // DISTINCT evita repetir um chamado com vários técnicos ou grupos atribuídos.
-
-        $criterios['DISTINCT'] = true;
-
-        $criterios['FROM'] = $tabela;
-
-        // LEFT JOIN liga o chamado aos usuários e grupos, permitindo uma das atribuições.
-
-        // FKEY informa quais campos fazem a ligação. ASSIGN indica o responsável.
-
-        $criterios['LEFT JOIN'] = [
-
-            $tabela_usuarios => [
-
-                'FKEY' => [
-
-                    $tabela_usuarios => 'tickets_id',
-
-                    $tabela => 'id'
-
-                ],
-
-                $tabela_usuarios . '.type' => CommonITILActor::ASSIGN,
-
-            ],
-
-            $tabela_grupos => [
-
-                'FKEY' => [
-
-                    $tabela_grupos => 'tickets_id',
-
-                    $tabela => 'id'
-
-                ],
-
-                $tabela_grupos . '.type' => CommonITILActor::ASSIGN,
-
-            ],
-
-        ];
-
-        // WHERE reúne os filtros que o chamado precisa atender ao mesmo tempo.
-
-        $criterios['WHERE'] = [
-
-            $tabela . '.is_deleted' => 0,
-
-            $tabela . '.entities_id' => $contexto['entidade_id'],
-
-            $tabela . '.itilcategories_id' => $categorias,
-
-            // NOT exclui solucionados e fechados; OR aceita técnico ou grupo atribuído.
-
-            'NOT' => [
-
-                $tabela . '.status' => [
-
-                    Ticket::SOLVED,
-
-                    Ticket::CLOSED
-
-                ]
-
-            ],
-
-            'OR' => $atribuicao,
-
-        ];
-
-        // O iterador nativo recebe campo e direção juntos; apresenta os maiores IDs primeiro.
-
-        $criterios['ORDER'] = [$tabela . '.id DESC'];
-
-        return $criterios;
+        return false;
 
     }
 
     /**
-     * Converte apenas IDs e estado, preservando o título real para apresentação com escape.
+
+     * Mantém cada setor com suas entidades e usa somente atores responsáveis.
+
+     * Histórico nulo permite conferir metadados sem exigir estado aberto ou encerrado.
+
      */
 
-    private function normalizarChamado( array $linha
+    private function montarCriterios(
+
+        array $contexto,
+
+        ?bool $historico
+
     ): array {
 
-        // Padroniza os campos numéricos, que podem chegar do banco como strings.
+        $tabela = Ticket::getTable();
 
-        foreach ([
+        $usuarios = Ticket_User::getTable();
 
-            'id',
+        $grupos = Group_Ticket::getTable();
 
-            'status',
+        $entidades_ativas = $contexto['entidades_ativas_ids'] ?? [$contexto['entidade_id']];
 
-            'entities_id',
+        $escopo = $contexto['visibilidade'] ?? [
 
-            'itilcategories_id'
+            'papel' => 'tecnico',
 
-        ] as $campo) {
+            'entidades_ids' => [$contexto['entidade_id']],
+
+            'vinculos' => [],
+
+        ];
+
+        $entidades = array_values(array_intersect($entidades_ativas, $escopo['entidades_ids'] ?? []));
+
+        $condicoes = [
+
+            $tabela . '.is_deleted' => 0,
+
+            $tabela . '.entities_id' => $entidades ?: [-1],
+
+        ];
+
+        // O histórico reúne somente solucionados e fechados no mesmo alcance autorizado.
+
+        if ($historico === true) {
+
+            $condicoes[$tabela . '.status'] = [Ticket::SOLVED, Ticket::CLOSED];
+
+        } elseif ($historico === false) {
+
+            // A fila de importação e revisão exclui os estados já encerrados.
+
+            $condicoes['NOT'] = [$tabela . '.status' => [Ticket::SOLVED, Ticket::CLOSED]];
+
+        }
+
+        // O técnico recebe exclusivamente chamados atribuídos ao seu usuário.
+
+        if ($escopo['papel'] === 'tecnico') {
+
+            $condicoes[$usuarios . '.users_id'] = $contexto['tecnico_id'];
+
+        } elseif ($escopo['papel'] === 'administrador_setor') {
+
+            // Cada setor cria um ramo para não cruzar grupos e entidades de setores diferentes.
+
+            $setores = [];
+
+            // A união aceita qualquer par autorizado, sem conceder acesso por associação ao grupo.
+
+            foreach ($escopo['vinculos'] as $vinculo) {
+
+                $setores[] = [
+
+                    $grupos . '.groups_id' => $vinculo['grupos_ids'] ?: [-1],
+
+                    $tabela . '.entities_id' => $vinculo['entidades_ids'] ?: [-1],
+
+                ];
+
+            }
+
+            // Um administrador sem setores não recebe consulta global por omissão.
+
+            if ($setores === []) {
+
+                $condicoes[$tabela . '.id'] = -1;
+
+            } else {
+
+                // O OR preserva os ramos AND de grupo e entidades do mesmo setor.
+
+                $condicoes['OR'] = $setores;
+
+            }
+
+        } elseif ($escopo['papel'] !== 'super_administrador') {
+
+            // Um papel desconhecido não pode aproveitar o alcance administrativo.
+
+            $condicoes[$tabela . '.id'] = -1;
+
+        }
+
+        return [
+
+            'SELECT' => [$tabela => ['id', 'name', 'status', 'entities_id', 'itilcategories_id', 'date_mod']],
+
+            'DISTINCT' => true,
+
+            'FROM' => $tabela,
+
+            'LEFT JOIN' => [
+
+                $usuarios => [
+
+                    'FKEY' => [$usuarios => 'tickets_id', $tabela => 'id'],
+
+                    $usuarios . '.type' => CommonITILActor::ASSIGN,
+
+                ],
+
+                $grupos => [
+
+                    'FKEY' => [$grupos => 'tickets_id', $tabela => 'id'],
+
+                    $grupos . '.type' => CommonITILActor::ASSIGN,
+
+                ],
+
+            ],
+
+            'WHERE' => $condicoes,
+
+            'ORDER' => [$tabela . '.id DESC'],
+
+        ];
+
+    }
+
+    /**
+
+     * Converte campos numéricos e preserva o título original para escape na apresentação.
+
+     */
+
+    private function normalizarChamado(
+
+        array $linha
+
+    ): array {
+
+        // O banco pode fornecer identificadores como texto; o negócio recebe inteiros.
+
+        foreach (['id', 'status', 'entities_id', 'itilcategories_id'] as $campo) {
 
             $linha[$campo] = (int) $linha[$campo];
 
@@ -349,4 +427,5 @@ final class ConsultaDeChamados {
     }
 
 }
+
 

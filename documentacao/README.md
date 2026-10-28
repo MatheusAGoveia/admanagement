@@ -1,11 +1,10 @@
 # Documentação do ADManagement
 
-Esta pasta substitui a antiga `docs`. O conteúdo foi elaborado a partir do código da versão 0.6.0 em 23/10/2026.
+Estado do código 0.7.0 em 28/10/2026. Esta pasta substitui a antiga `docs`.
 
-- [Mapa mental interativo](MAPA_MENTAL.html): abra no navegador, escolha um ramo e selecione um arquivo para conhecer sua responsabilidade, métodos públicos e referências.
-- [Diagrama UML de classes](UML_CLASSES.html): explore atributos, assinaturas, visibilidade e dependências; alterne entre a visão por classe e o diagrama completo.
-- [Estrutura e arquitetura](ESTRUTURA_E_ARQUITETURA.md): mapa estático, pastas, entradas HTTP, fluxo de revisão, armazenamento, limites atuais e catálogo dos arquivos.
+- [Mapa mental interativo](MAPA_MENTAL.html): responsabilidades, arquivos, pontos de entrada públicos e dependências.
+- [Diagrama UML de classes](UML_CLASSES.html): 31 classes próprias, atributos, visibilidade e assinaturas extraídas do código atual.
+- [Estrutura e arquitetura](ESTRUTURA_E_ARQUITETURA.md): recursos nativos do GLPI, entradas HTTP, regras de acesso, revisão, armazenamento e catálogo.
+- [Configurar acesso por perfil](CONFIGURACAO_DE_ACESSO.md): direitos nativos, setores, entidades, migração e exemplos.
 
-O mapa mental e o diagrama UML funcionam localmente e não depende de instalação ou acesso à internet. Os links para código são relativos à pasta do plugin.
-
-- [Configurar setores e permissões por usuário, grupo ou perfil](CONFIGURACAO_DE_ACESSO.md).
+Mapa e UML funcionam localmente, sem internet. Os links para código são relativos à pasta do plugin. Testes isolados não substituem homologação no GLPI real.

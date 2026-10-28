@@ -9,64 +9,22 @@ namespace GlpiPlugin\Admanagement;
 final class ApresentacaoDaConfiguracao {
 
     /**
-     * Mostra controles nativos de perfil e entidade protegidos pela entrada administrativa.
+     * Encaminha a configuração de direitos para a aba do plugin nos perfis nativos do GLPI.
      */
 
-    public static function mostrarAcesso( string $url ): void {
+    public static function mostrarAcesso(): void {
 
-        $acesso = ConfiguracaoDeAcesso::consultar();
+        echo '<section class="contas-cartao mt-3"><div class="contas-cabecalho"><h2>Permissões por perfil</h2></div><div class="contas-corpo">';
 
-        echo '<section class="contas-cartao mt-3"><div class="contas-cabecalho"><h2>Perfis e entidades autorizados</h2></div><div class="contas-corpo"><form method="post" action="'
+        echo '<p>Em Administração → Perfis, abra um perfil da interface central e use a aba ADManagement. O direito do perfil ativo define a operação pessoal ou a supervisão dos setores vinculados abaixo.</p>';
 
-            . htmlescape($url)
+        echo '<p>As entidades continuam limitadas pelas autorizações nativas do GLPI. Os grupos atribuídos aos chamados identificam os setores atendidos.</p>';
 
-            . '"><input type="hidden" name="acao_configuracao" value="salvar_acesso">';
+        echo '<a class="btn btn-outline-primary" href="'
 
-        \Dropdown::show(
+            . htmlescape(\Profile::getSearchURL())
 
-            \Profile::class,
-
-            [
-
-                'name' => 'perfis_permitidos[]',
-
-                'value' => $acesso['perfis_permitidos'] ?? [],
-
-                'multiple' => true,
-
-                'addicon' => false,
-
-                'width' => '100%'
-
-            ]
-
-        );
-
-        \Dropdown::show(
-
-            \Entity::class,
-
-            [
-
-                'name' => 'entidades_permitidas[]',
-
-                'value' => $acesso['entidades_permitidas'] ?? [],
-
-                'multiple' => true,
-
-                'addicon' => false,
-
-                'width' => '100%'
-
-            ]
-
-        );
-
-        echo '<p>Perfil E grupo E entidade são obrigatórios. Listas vazias bloqueiam a operação. Nenhum direito é concedido automaticamente.</p><button class="btn btn-primary">Salvar acesso</button>';
-
-        \Html::closeForm();
-
-        echo '</div></section>';
+            . '">Abrir perfis do GLPI</a></div></section>';
 
     }
 
@@ -75,7 +33,11 @@ final class ApresentacaoDaConfiguracao {
      * explícitos.
      */
 
-    public static function mostrarDiretorios(string $url ): void {
+    public static function mostrarDiretorios(
+
+        string $url
+
+    ): void {
 
         echo '<section class="contas-cartao mt-3"><div class="contas-cabecalho"><h2>Conexão própria de leitura com AD</h2></div><div class="contas-corpo"><p>Cadastre somente após confirmar servidor, CA confiável e atributos com a infraestrutura. Nenhum teste de rede ocorre ao salvar.</p>';
 
@@ -95,7 +57,9 @@ final class ApresentacaoDaConfiguracao {
 
             . htmlescape($url)
 
-            . '"><input type="hidden" name="acao_configuracao" value="salvar_diretorio">';
+            . '">';
+
+        echo \Html::hidden('acao_configuracao', ['value' => 'salvar_diretorio']);
 
         $campos = [
 
@@ -123,31 +87,53 @@ final class ApresentacaoDaConfiguracao {
 
         foreach ($campos as $campo => $rotulo) {
 
-            echo '<label class="form-label" for="diretorio_'
+            echo '<label class="form-label" for="diretorio_' . $campo . '">'
 
-                . $campo
+                . htmlescape($rotulo) . '</label>';
 
-                . '">'
+            echo \Html::input(
 
-                . htmlescape($rotulo)
+                $campo,
 
-                . '</label><input class="form-control mb-2" id="diretorio_'
+                [
 
-                . $campo
+                    'id' => 'diretorio_' . $campo,
 
-                . '" name="'
+                    'class' => 'form-control mb-2',
 
-                . $campo
+                    'value' => $campo === 'porta' ? '636' : '',
 
-                . '" value="'
+                    'maxlength' => 500
 
-                . ($campo === 'porta' ? '636' : '')
+                ]
 
-                . '" maxlength="500">';
+            );
 
         }
 
-        echo '<label>Segurança <select name="seguranca" class="form-select"><option value="LDAPS">LDAPS</option><option value="STARTTLS">STARTTLS</option></select></label><br><label><input type="checkbox" name="obrigatorio" value="1" checked> Domínio obrigatório para disponibilidade e duplicidades</label><p>Não há allowlist de OUs, conta modelo ou opção de escrita. A Base DN identifica o domínio consultado.</p><button class="btn btn-primary">Salvar conexão de leitura</button>';
+        echo '<label class="form-label" for="dropdown_seguranca_admanagement">Segurança</label>';
+
+        \Dropdown::showFromArray(
+
+            'seguranca',
+
+            ['LDAPS' => 'LDAPS', 'STARTTLS' => 'STARTTLS'],
+
+            [
+
+                'value' => 'LDAPS',
+
+                'rand' => '_admanagement',
+
+                'width' => '100%',
+
+                'noselect2' => true
+
+            ]
+
+        );
+
+        echo '<br><label><input type="checkbox" name="obrigatorio" value="1" checked> Domínio obrigatório para disponibilidade e duplicidades</label><p>Não há allowlist de OUs, conta modelo ou opção de escrita. A Base DN identifica o domínio consultado.</p><button class="btn btn-primary">Salvar conexão de leitura</button>';
 
         \Html::closeForm();
 

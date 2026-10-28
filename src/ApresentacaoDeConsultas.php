@@ -9,96 +9,72 @@ namespace GlpiPlugin\Admanagement;
 final class ApresentacaoDeConsultas {
 
     /**
-     * Usa os resultados reais existentes no trabalho; não produz resultados de demonstração.
+     * Mantém os nomes de estados próprios da consulta ao diretório em um único catálogo.
      */
 
-    public static function mostrar( array $rascunho ): void {
+    private const ROTULOS = [
 
-        $rotulos = [
+        'disponivel' => 'disponível nos domínios consultados',
 
-            'disponivel' => 'disponível nos domínios consultados',
+        'ocupado' => 'ocupado',
 
-            'ocupado' => 'ocupado',
+        'incompleto' => 'consulta incompleta',
 
-            'incompleto' => 'consulta incompleta',
+        'nao_consultado' => 'não consultado',
 
-            'nao_consultado' => 'não consultado',
+        'inadequado' => 'precisa de revisão',
 
-            'inadequado' => 'precisa de revisão',
+        'completo' => 'consulta completa',
 
-            'completo' => 'consulta completa',
+        'sem_conflitos' => 'nenhum conflito encontrado',
 
-            'sem_conflitos' => 'nenhum conflito encontrado',
+        'possivel_duplicidade' => 'possível duplicidade'
 
-            'possivel_duplicidade' => 'possível duplicidade'
+    ];
 
-        ];
+    /**
+     * Mostra as evidências registradas e as orientações correspondentes ao tipo de operação.
+     */
+
+    public static function mostrar(
+
+        array $rascunho
+
+    ): void {
 
         $dominios = ConfiguracaoDoDiretorio::consultar();
 
-        // Apresenta o estado e a data de cada login efetivamente consultado.
+        $agora = time();
+
+        // Cada login exibe apenas a evidência registrada, inclusive sua cobertura parcial.
 
         foreach ($rascunho['consultas_logins'] ?? [] as $login => $consulta) {
 
-            echo '<p><code>' . htmlescape($login) . '</code>: ' . htmlescape(
+            echo '<p><code>' . htmlescape($login) . '</code>: '
 
-                ($consulta['expira'] ?? 0) <= time() ? 'consulta expirada' : ($rotulos[$consulta['estado']] ?? 'precisa de revisão')
+                . htmlescape(self::descreverEstado($consulta, $agora))
 
-            ) . '. Consultado em ' . htmlescape($consulta['consultado_em']) . '.</p>';
+                . '. Consultado em ' . htmlescape($consulta['consultado_em']) . '.</p>';
 
-            echo '<ul>';
-
-            // Detalha a cobertura por domínio para não esconder falhas parciais da consulta.
-
-            foreach ($consulta['cobertura'] as $id => $estado) {
-
-                echo '<li>'
-
-                    . htmlescape($dominios[$id]['nome'] ?? 'Domínio removido')
-
-                    . ': '
-
-                    . htmlescape($rotulos[$estado] ?? 'incompleto')
-
-                    . '</li>';
-
-            }
-
-            echo '</ul>';
+            self::mostrarCobertura($consulta['cobertura'], $dominios);
 
         }
 
-        // Mostra o resultado de duplicidades somente quando essa verificação foi registrada no rascunho.
+        // Duplicidades só são apresentadas quando uma consulta explícita produziu essa evidência.
 
         if (isset($rascunho['duplicidades'])) {
 
             $consulta = $rascunho['duplicidades'];
 
-            echo '<p>Duplicidades: ' . htmlescape(
+            echo '<p>Duplicidades: ' . htmlescape(self::descreverEstado($consulta, $agora))
 
-                ($consulta['expira'] ?? 0) <= time() ? 'consulta expirada' : ($rotulos[$consulta['estado']] ?? 'precisa de revisão')
+                . '. A ausência de conflito não comprova a identidade da conta.</p>';
 
-            ) . '. A ausência de conflito não comprova a identidade da conta.</p>';
-
-            // Expõe a cobertura de duplicidades de cada domínio consultado.
-
-            foreach ($consulta['cobertura'] as $id => $estado) {
-
-                echo '<p>'
-
-                    . htmlescape($dominios[$id]['nome'] ?? 'Domínio removido')
-
-                    . ': '
-
-                    . htmlescape($rotulos[$estado] ?? 'incompleto')
-
-                    . '.</p>';
-
-            }
+            self::mostrarCobertura($consulta['cobertura'], $dominios);
 
         }
 
-        // Avalia opções seguras apenas para criação e depois de existir uma consulta de logins.
+        // A criação exige alguma disponibilidade comprovada e ainda válida para orientar a escolha.
 
         if ($rascunho['tipo'] === 'criacao' && isset($rascunho['consultas_logins'])) {
 
@@ -107,18 +83,20 @@ final class ApresentacaoDeConsultas {
                 $rascunho['consultas_logins'],
 
                 /**
-                 * Mantém somente logins disponíveis cuja evidência de consulta ainda não expirou.
+
+                 * Mantém somente logins disponíveis cuja evidência ainda não expirou.
+
                  */
 
                 static fn(
 
-                    array $c
+                    array $consulta
 
-                ): bool => $c['estado'] === 'disponivel' && $c['expira'] > time()
+                ): bool => $consulta['estado'] === 'disponivel' && $consulta['expira'] > $agora
 
             );
 
-            // Orienta revisão ou entrada manual quando nenhuma disponibilidade segura foi comprovada.
+            // Sem evidência válida, a tela orienta nova consulta e não declara um login seguro.
 
             if ($livres === []) {
 
@@ -128,7 +106,7 @@ final class ApresentacaoDeConsultas {
 
         }
 
-        // Explica que um login ocupado na renovação não prova a identidade nem autoriza alterações.
+        // A presença da conta na renovação não comprova identidade nem autoriza alterações.
 
         if ($rascunho['tipo'] === 'renovacao') {
 
@@ -138,5 +116,62 @@ final class ApresentacaoDeConsultas {
 
     }
 
-}
+    /**
+     * Prioriza a expiração da evidência sobre o resultado que foi obtido no passado.
+     */
 
+    private static function descreverEstado(
+
+        array $consulta,
+
+        int $agora
+
+    ): string {
+
+        // Um resultado expirado precisa ser consultado novamente antes de orientar a revisão.
+
+        if (($consulta['expira'] ?? 0) <= $agora) {
+
+            return 'consulta expirada';
+
+        }
+
+        return self::ROTULOS[$consulta['estado']] ?? 'precisa de revisão';
+
+    }
+
+    /**
+     * Reúne a apresentação de cobertura para logins e duplicidades sem esconder falhas de domínio.
+     */
+
+    private static function mostrarCobertura(
+
+        array $cobertura,
+
+        array $dominios
+
+    ): void {
+
+        echo '<ul>';
+
+        // Domínios removidos continuam identificados como tal na evidência já registrada.
+
+        foreach ($cobertura as $id => $estado) {
+
+            echo '<li>'
+
+                . htmlescape($dominios[$id]['nome'] ?? 'Domínio removido')
+
+                . ': '
+
+                . htmlescape(self::ROTULOS[$estado] ?? 'incompleto')
+
+                . '</li>';
+
+        }
+
+        echo '</ul>';
+
+    }
+
+}

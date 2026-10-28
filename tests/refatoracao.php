@@ -24,8 +24,6 @@ namespace {
 
     use GlpiPlugin\Admanagement\ConsultaDeChamados;
 
-    use GlpiPlugin\Admanagement\ControleDeAcesso;
-
     use GlpiPlugin\Admanagement\EntradaDaFerramenta;
 
     use GlpiPlugin\Admanagement\FormularioDaSolicitacao;
@@ -42,6 +40,96 @@ namespace {
 
     use GlpiPlugin\Admanagement\RevisorDaOperacao;
 
+    /**
+
+     * Mantém o ancestral exigido pela integração nativa de abas do plugin.
+
+     */
+
+    class CommonGLPI {
+
+    }
+
+    /**
+
+     * Identifica os perfis administrativos sem depender de seu nome de exibição.
+
+     */
+
+    class Profile extends CommonGLPI {
+
+        /**
+
+         * O perfil sintético 4 possui o direito nativo de administrar perfis.
+
+         */
+
+        public static function getSuperAdminProfilesId(): array {
+
+            return [4];
+
+        }
+
+    }
+
+    /**
+
+     * Entrega o mesmo contrato de identidade usado pela API nativa de sessão.
+
+     */
+
+    class SessaoDaRefatoracao {
+
+        /**
+
+         * Devolve o usuário conectado do cenário.
+
+         */
+
+        public function getUserId(): int {
+
+            return $_SESSION['glpiID'];
+
+        }
+
+        /**
+
+         * Devolve exclusivamente o perfil selecionado na sessão.
+
+         */
+
+        public function getProfileId(): int {
+
+            return $_SESSION['glpiactiveprofile']['id'];
+
+        }
+
+        /**
+
+         * Devolve a seleção nativa de entidades do cenário.
+
+         */
+
+        public function getActiveEntitiesIds(): array {
+
+            return $_SESSION['glpiactiveentities'];
+
+        }
+
+        /**
+
+         * Devolve a entidade explicitamente ativa.
+
+         */
+
+        public function getCurrentEntityId(): int {
+
+            return $_SESSION['glpiactive_entity'];
+
+        }
+
+    }
+
     // Estes substitutos existem somente no teste. Não são dados usados pelo produto.
 
     define('READ', 1);
@@ -49,7 +137,9 @@ namespace {
     define('UPDATE', 2);
 
     /**
+
      * Substitui a persistência GLPI por valores guardados em memória.
+
      */
 
     class Config {
@@ -59,7 +149,9 @@ namespace {
         public static bool $falhar_gravacao = false;
 
         /**
+
          * Devolve os valores guardados em memória para este teste.
+
          */
 
         public static function getConfigurationValues(
@@ -83,7 +175,9 @@ namespace {
         }
 
         /**
+
          * Permite simular uma gravação que não foi persistida.
+
          */
 
         public static function setConfigurationValues(
@@ -107,7 +201,9 @@ namespace {
     }
 
     /**
+
      * Define o contexto de login, interface, entidade e direitos de cada cenário.
+
      */
 
     class Session {
@@ -115,7 +211,21 @@ namespace {
         public static bool $administrador = true;
 
         /**
+
+         * Reproduz o retrato nativo da sessão sem consultar serviços externos.
+
+         */
+
+        public static function getCurrentSessionInfo(): ?SessaoDaRefatoracao {
+
+            return self::getLoginUserID() ? new SessaoDaRefatoracao() : null;
+
+        }
+
+        /**
+
          * Simula um usuário conectado.
+
          */
 
         public static function getLoginUserID(): int {
@@ -125,7 +235,9 @@ namespace {
         }
 
         /**
+
          * Devolve a interface definida pelo cenário.
+
          */
 
         public static function getCurrentInterface(): string {
@@ -135,7 +247,9 @@ namespace {
         }
 
         /**
+
          * Devolve a entidade definida pelo cenário.
+
          */
 
         public static function getActiveEntity(): int {
@@ -145,7 +259,9 @@ namespace {
         }
 
         /**
+
          * Representa o direito administrativo, sem concedê-lo no produto.
+
          */
 
         public static function haveRight(
@@ -154,14 +270,24 @@ namespace {
 
             $nivel
 
-        ): bool {
+        ): int|false {
 
-            return self::$administrador;
+            // Somente o cenário administrativo permite alterar configurações.
+
+            if ($direito === 'config') {
+
+                return self::$administrador ? ($nivel & UPDATE) ?: false : false;
+
+            }
+
+            return $direito === 'plugin_admanagement' ? ($nivel & READ) ?: false : false;
 
         }
 
         /**
+
          * Permite consultar apenas a entidade usada no cenário.
+
          */
 
         public static function haveAccessToEntity(
@@ -177,7 +303,9 @@ namespace {
         }
 
         /**
+
          * Interrompe o cenário se o usuário não estiver conectado.
+
          */
 
         public static function checkLoginUser(): void {
@@ -195,7 +323,9 @@ namespace {
     }
 
     /**
+
      * Controla a ativação e o endereço base usados nas verificações de menu.
+
      */
 
     class Plugin {
@@ -203,7 +333,9 @@ namespace {
         public static bool $ativo = true;
 
         /**
+
          * Simula a ativação do plugin.
+
          */
 
         public static function isPluginActive(
@@ -217,7 +349,9 @@ namespace {
         }
 
         /**
+
          * Devolve uma URL local para comparar os links gerados.
+
          */
 
         public static function getWebDir(
@@ -233,7 +367,9 @@ namespace {
     }
 
     /**
+
      * Reproduz somente os campos e a leitura de catálogo exigidos pela configuração.
+
      */
 
     class Group {
@@ -241,7 +377,9 @@ namespace {
         public array $fields = [];
 
         /**
+
          * Simula itens válidos, inexistentes e fora da entidade permitida.
+
          */
 
         public function getFromDB(
@@ -273,7 +411,9 @@ namespace {
     }
 
     /**
+
      * Usa as mesmas respostas de catálogo para as categorias dos cenários.
+
      */
 
     class ITILCategory extends Group {
@@ -281,7 +421,9 @@ namespace {
     }
 
     /**
+
      * Mantém o papel de responsável usado nas ligações de chamados.
+
      */
 
     class CommonITILActor {
@@ -291,13 +433,17 @@ namespace {
     }
 
     /**
+
      * Expõe a tabela de usuários atribuídos ao chamado.
+
      */
 
     class Ticket_User {
 
         /**
+
          * Mantém o nome da tabela de atores usada nos critérios.
+
          */
 
         public static function getTable(): string {
@@ -309,13 +455,17 @@ namespace {
     }
 
     /**
+
      * Expõe a tabela de grupos atribuídos ao chamado.
+
      */
 
     class Group_Ticket {
 
         /**
+
          * Mantém o nome da tabela de grupos usada nos critérios.
+
          */
 
         public static function getTable(): string {
@@ -327,7 +477,9 @@ namespace {
     }
 
     /**
+
      * Permite testar a leitura dos chamados e os estados excluídos da fila.
+
      */
 
     class Ticket {
@@ -335,7 +487,9 @@ namespace {
         public static array $negados = [];
 
         /**
+
          * Mantém o nome da tabela principal usada nos critérios.
+
          */
 
         public static function getTable(): string {
@@ -345,7 +499,9 @@ namespace {
         }
 
         /**
+
          * Simula chamados para os quais o GLPI nega a leitura.
+
          */
 
         public function can(
@@ -360,6 +516,30 @@ namespace {
 
         }
 
+        /**
+
+         * Identifica o estado do chamado usando o contrato nativo de apresentação.
+
+         */
+
+        public static function getStatus(int $estado): string {
+
+            return 'Estado sintético ' . $estado;
+
+        }
+
+        /**
+
+         * Constrói o destino sintético de abertura do chamado.
+
+         */
+
+        public static function getFormURLWithID(int $id): string {
+
+            return '/front/ticket.form.php?id=' . $id;
+
+        }
+
         public const SOLVED = 5;
 
         public const CLOSED = 6;
@@ -367,7 +547,9 @@ namespace {
     }
 
     /**
+
      * Registra consultas e fornece linhas e metadados controlados pelos testes.
+
      */
 
     class BancoDoTeste {
@@ -381,7 +563,9 @@ namespace {
         public bool $tabela_existe = true;
 
         /**
+
          * Guarda os critérios para verificar filtros, campos e paginação.
+
          */
 
         public function request(
@@ -397,7 +581,9 @@ namespace {
         }
 
         /**
+
          * Simula uma tabela ausente quando o cenário pede isso.
+
          */
 
         public function tableExists(
@@ -411,7 +597,9 @@ namespace {
         }
 
         /**
+
          * Expõe os nomes de colunas que o leitor deve conferir.
+
          */
 
         public function listFields(
@@ -427,13 +615,53 @@ namespace {
     }
 
     /**
+
      * Substitui o fechamento de formulário e o token nativo na comparação do HTML.
+
      */
 
     class Html {
 
         /**
+
+         * Reproduz o escape dos campos ocultos emitidos pelos formulários nativos.
+
+         */
+
+        public static function hidden(string $nome, array $opcoes): string {
+
+            return '<input type="hidden" name="' . htmlescape($nome) . '" value="' . htmlescape($opcoes['value']) . '">';
+
+        }
+
+        /**
+
+         * Mantém tipo e escape dos campos textuais gerados pelo helper nativo.
+
+         */
+
+        public static function input(string $nome, array $opcoes): string {
+
+            return '<input name="' . htmlescape($nome) . '" value="' . htmlescape($opcoes['value'] ?? '') . '">';
+
+        }
+
+        /**
+
+         * Retorna o instante sintético para verificar a renderização sem configuração regional externa.
+
+         */
+
+        public static function convDateTime(string $instante): string {
+
+            return $instante;
+
+        }
+
+        /**
+
          * Marca o fechamento e a presença do token no HTML gerado.
+
          */
 
         public static function closeForm(): void {
@@ -445,7 +673,41 @@ namespace {
     }
 
     /**
+
+     * Reproduz os seletores nativos mantendo os valores de zero, um e texto vazio distintos.
+
+     */
+
+    class Dropdown {
+
+        /**
+
+         * Gera opções escapadas conforme a seleção sintética do cenário.
+
+         */
+
+        public static function showFromArray(string $nome, array $opcoes, array $configuracao): void {
+
+            echo '<select name="' . htmlescape($nome) . '">';
+
+            // Cada opção mantém seu valor textual, inclusive a opção de revisão pendente.
+
+            foreach ($opcoes as $valor => $rotulo) {
+
+                echo '<option value="' . htmlescape($valor) . '"' . ((string) $valor === (string) ($configuracao['value'] ?? '') ? ' selected' : '') . '>' . htmlescape($rotulo) . '</option>';
+
+            }
+
+            echo '</select>';
+
+        }
+
+    }
+
+    /**
+
      * Substitui o escape nativo somente para testar o HTML sem GLPI.
+
      */
 
     function htmlescape(
@@ -459,7 +721,9 @@ namespace {
     }
 
     /**
+
      * Compara valor e tipo, registrando o resultado para a comparação entre versões.
+
      */
 
     function conferirResultado(
@@ -527,6 +791,8 @@ namespace {
         'glpigroups' => [7],
 
         'glpiactive_entity' => 2,
+
+        'glpiactiveentities' => [2],
 
     ];
 
@@ -656,243 +922,47 @@ namespace {
 
     }
 
-    // As oito combinações só autorizam quando perfil, grupo e entidade são permitidos.
-
-    $configuracao = [
-
-        'perfis_permitidos' => [4],
-
-        'grupos_permitidos' => [7],
-
-        'entidades_permitidas' => [2]
-
-    ];
-
-    // Alterna os perfis do cenário para testar a combinação obrigatória de permissões.
-
-    foreach ([
-
-        4,
-
-        5
-
-    ] as $perfil_id) {
-
-        // Alterna os grupos em cada perfil para conferir que grupo também é obrigatório.
-
-        foreach ([
-
-            7,
-
-            8
-
-        ] as $grupo_id) {
-
-            // Alterna as entidades para completar a matriz de autorização do cenário.
-
-            foreach ([
-
-                2,
-
-                3
-
-            ] as $entidade_id) {
-
-                $contexto = [
-
-                    'perfil_atual' => $perfil_id,
-
-                    'grupos_atuais' => [$grupo_id],
-
-                    'entidade_atual' => $entidade_id
-
-                ];
-
-                $esperado = false;
-
-                // Mantém o resultado autorizado somente na combinação exata de perfil, grupo e entidade permitidos.
-
-                if ($perfil_id === 4 && $grupo_id === 7 && $entidade_id === 2) {
-
-                    $esperado = true;
-
-                }
-
-                $cenario = 'acesso ' . $perfil_id . '/' . $grupo_id . '/' . $entidade_id;
-
-                conferirResultado(
-
-                    ControleDeAcesso::avaliarPerfilGrupoEEntidade($contexto, $configuracao),
-
-                    $esperado,
-
-                    $cenario
-
-                );
-
-            }
-
-        }
-
-    }
-
-    $contexto = [
-
-        'perfil_atual' => 4,
-
-        'grupos_atuais' => [7],
-
-        'entidade_atual' => 2
-
-    ];
-
-    // Exercita identificadores inválidos na política de acesso sem aceitar coerção permissiva.
-
-    foreach ($invalidos as $indice => $valor) {
-
-        $caso = $contexto;
-
-        $caso['perfil_atual'] = $valor;
-
-        conferirResultado(
-
-            ControleDeAcesso::avaliarPerfilGrupoEEntidade($caso, $configuracao),
-
-            false,
-
-            'perfil inválido ' . $indice
-
-        );
-
-    }
-
-    // Confere grupos ausentes, mistos e associativos que devem negar operação.
-
-    foreach ([
-
-        [],
-
-        [
-
-            7,
-
-            false
-
-        ],
-
-        ['grupo' => 7],
-
-        null
-
-    ] as $indice => $grupos) {
-
-        $caso = $contexto;
-
-        $caso['grupos_atuais'] = $grupos;
-
-        conferirResultado(
-
-            ControleDeAcesso::avaliarPerfilGrupoEEntidade($caso, $configuracao),
-
-            false,
-
-            'grupos inválidos ' . $indice
-
-        );
-
-    }
+    // As concessões por perfil ativo são verificadas nas suítes acesso.php e visibilidade.php.
 
     // Configuração: manter listas vazias, normalização e recusa sem gravação parcial.
 
-    $vazio = [
-
-        'grupos_permitidos' => [],
-
-        'categorias_itil' => []
-
-    ];
+    $vazio = ['categorias_itil' => []];
 
     conferirResultado(ConfiguracaoDaFila::consultar(), $vazio, 'configuração ausente');
 
-    ConfiguracaoDaFila::salvar([
+    ConfiguracaoDaFila::salvar(['categorias_itil' => ['12', 12]]);
 
-        'grupos_permitidos' => [
+    $configuracao_salva = ['categorias_itil' => [12]];
 
-            '7',
+    conferirResultado(ConfiguracaoDaFila::consultar(), $configuracao_salva, 'categorias normalizadas');
 
-            7
+    // Grupos do documento antigo não participam da configuração operacional nem concedem acesso.
 
-        ],
+    ConfiguracaoDaFila::salvar(['grupos_permitidos' => [7], 'categorias_itil' => [12]]);
 
-        'categorias_itil' => ['12']
+    conferirResultado(ConfiguracaoDaFila::consultar(), $configuracao_salva, 'grupo legado ignorado');
 
-    ]);
+    // Seleções inválidas de categorias devem preservar a configuração salva.
 
-    // Tentativas inválidas seguintes precisam preservar esta configuração já salva.
-
-    $configuracao_salva = [
-
-        'grupos_permitidos' => [7],
-
-        'categorias_itil' => [12]
-
-    ];
-
-    conferirResultado(
-
-        ConfiguracaoDaFila::consultar(),
-
-        $configuracao_salva,
-
-        'configuração normalizada'
-
-    );
-
-    // Envia seleções inválidas de grupos para comprovar que a configuração anterior é preservada.
-
-    foreach ([
-
-        '7',
-
-        [0],
-
-        [true],
-
-        ['01'],
-
-        [99],
-
-        [404],
-
-        ['grupo' => 7]
-
-    ] as $indice => $grupos) {
+    foreach (['12', [0], [true], ['01'], [99], [404], ['categoria' => 12]] as $indice => $categorias) {
 
         $rejeitado = false;
 
         try {
 
-            ConfiguracaoDaFila::salvar(['grupos_permitidos' => $grupos]);
+            ConfiguracaoDaFila::salvar(['categorias_itil' => $categorias]);
 
         } catch (InvalidArgumentException $erro) {
 
-            // Registra a recusa esperada de uma seleção que não pertence ao catálogo ou formato permitido.
+            // Confirma rejeição do formato ou catálogo sem gravar parte das opções.
 
             $rejeitado = true;
 
         }
 
-        conferirResultado($rejeitado, true, 'seleção rejeitada ' . $indice);
+        conferirResultado($rejeitado, true, 'seleção de categoria rejeitada ' . $indice);
 
-        conferirResultado(
-
-            ConfiguracaoDaFila::consultar(),
-
-            $configuracao_salva,
-
-            'configuração preservada ' . $indice
-
-        );
+        conferirResultado(ConfiguracaoDaFila::consultar(), $configuracao_salva, 'configuração preservada ' . $indice);
 
     }
 
@@ -938,8 +1008,6 @@ namespace {
 
     ConfiguracaoDaFila::salvar([
 
-        'grupos_permitidos' => '',
-
         'categorias_itil' => ''
 
     ]);
@@ -958,7 +1026,7 @@ namespace {
 
             '{}',
 
-            '{"grupos_permitidos":[0],"categorias_itil":[]}'
+            '{"grupos_permitidos":[7],"categorias_itil":[0]}'
 
         ] as $indice => $json
 
@@ -988,7 +1056,7 @@ namespace {
 
     );
 
-    // Consulta: o registro extra indica próxima página, mesmo que um item seja ilegível.
+    // Consulta: a paginação conta somente chamados legíveis, sem revelar candidatos recusados.
 
     $contexto_tecnico = [
 
@@ -1034,17 +1102,25 @@ namespace {
 
     $fila = $consulta->listar($contexto_tecnico, [12], 2);
 
-    conferirResultado(count($fila['chamados']), 24, 'limite aplicado antes da permissão');
+    conferirResultado(count($fila['chamados']), 0, 'segunda página vazia após contar 25 chamados legíveis');
 
-    conferirResultado($fila['tem_proxima'], true, 'próxima página');
+    conferirResultado($fila['tem_proxima'], false, 'chamado ilegível não indica próxima página');
 
-    conferirResultado($fila['chamados'][0]['id'], 1, 'ID do chamado normalizado');
+    $primeira_pagina = $consulta->listar($contexto_tecnico, [12]);
+
+    conferirResultado(count($primeira_pagina['chamados']), 25, 'primeira página completa após excluir ilegível');
+
+    conferirResultado(array_column($primeira_pagina['chamados'], 'id'), array_values(array_diff(range(1, 26), [2])), 'paginação preserva exatamente os chamados legíveis');
+
+    conferirResultado($primeira_pagina['tem_proxima'], false, '25 chamados legíveis não anunciam uma página adicional');
+
+    conferirResultado($primeira_pagina['chamados'][0]['id'], 1, 'ID do chamado normalizado');
 
     $criterios = $banco->consultas[0];
 
-    conferirResultado($criterios['START'], 25, 'deslocamento da segunda página');
+    conferirResultado($criterios['START'], 0, 'leitura começa nos candidatos anteriores ao deslocamento visível');
 
-    conferirResultado($criterios['LIMIT'], 26, 'registro extra');
+    conferirResultado($criterios['LIMIT'], 100, 'lote de candidatos limitado');
 
     conferirResultado($criterios['WHERE']['glpi_tickets_users.users_id'], 9, 'atribuição exclusivamente individual para técnico');
 
@@ -1943,4 +2019,3 @@ namespace {
     echo 'Assinatura dos resultados: ' . hash('sha256', serialize($resultados)) . PHP_EOL;
 
 }
-

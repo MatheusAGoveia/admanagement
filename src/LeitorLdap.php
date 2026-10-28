@@ -173,11 +173,11 @@ final class LeitorLdap {
 
             static fn(
 
-                array $a,
+                array $primeira_ou,
 
-                array $b
+                array $segunda_ou
 
-            ): int => strcasecmp($a['dn'], $b['dn'])
+            ): int => strcasecmp($primeira_ou['dn'], $segunda_ou['dn'])
 
         );
 

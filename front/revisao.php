@@ -587,9 +587,7 @@ InterfaceDaFerramenta::mostrarInicio(
 
     'solicitacoes',
 
-    AcessoGlpi::podeConfigurar(),
-
-    AcessoGlpi::estaComAcessoTemporarioParaTestes()
+    AcessoGlpi::podeConfigurar()
 
 );
 

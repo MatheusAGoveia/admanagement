@@ -5,20 +5,24 @@ namespace GlpiPlugin\Admanagement;
 use InvalidArgumentException;
 
 /**
- * Valida e persiste setores e concessões sem alterar grupos, usuários ou perfis nativos.
+
+ * Persiste somente o mapa perfil-setor; direitos continuam exclusivamente no GLPI.
+
  */
 
 final class ConfiguracaoDeVisibilidade {
 
     /**
-     * Distingue instalação legada de política nova vazia; documento corrompido bloqueia a operação.
+
+     * Retorna ausência real ou um mapa atual válido; documentos antigos exigem migração explícita.
+
      */
 
     public static function consultar(): ?array {
 
         $valores = \Config::getConfigurationValues('admanagement', ['visibilidade']);
 
-        // Somente a ausência real da chave permite o legado; nenhum conteúdo JSON representa ausência.
+        // Ausência de mapa não substitui nem concede direitos nativos.
 
         if (!array_key_exists('visibilidade', $valores)) {
 
@@ -31,86 +35,54 @@ final class ConfiguracaoDeVisibilidade {
     }
 
     /**
-     * Normaliza IDs de formulário com validação decimal estrita, incluindo zero apenas para entidade.
+
+     * Fornece o formato vazio atual sem reativar configurações legadas.
+
      */
 
-    public static function normalizarLista(
+    public static function vazia(): array {
 
-        mixed $valores,
-
-        bool $raiz = false
-
-    ): array {
-
-        // O seletor múltiplo GLPI pode representar a remoção de todas as opções por texto vazio.
-
-        if ($valores === '') {
-
-            $valores = [];
-
-        }
-
-        // Um campo isolado ou associativo não pode ser interpretado como uma lista de concessões.
-
-        if (!is_array($valores) || !array_is_list($valores)) {
-
-            throw new InvalidArgumentException('Envie uma lista válida de identificadores.');
-
-        }
-
-        $ids = [];
-
-        // Valida a lista inteira antes de remover duplicidades.
-
-        foreach ($valores as $valor) {
-
-            // A entidade zero corresponde somente à raiz explicitamente escolhida.
-
-            if ($raiz && ($valor === 0 || $valor === '0')) {
-
-                $ids[] = 0;
-
-            } else {
-
-                // Demais identificadores precisam ser positivos e sem coerção parcial.
-
-                $ids[] = EntradaDaFerramenta::lerIdentificador($valor);
-
-            }
-
-        }
-
-        return array_values(array_unique($ids));
+        return ['versao' => 2, 'setores' => [], 'regras' => []];
 
     }
 
     /**
-     * Verifica o documento completo, inclusive referências entre regras e setores.
+
+     * Valida listas completas e aceita zero somente para a entidade raiz.
+
      */
 
-    public static function validar(
+    public static function normalizarLista(mixed $valores, bool $raiz = false): array {
 
-        array $dados
+        return EntradaDaFerramenta::lerListaDeIdentificadores($valores, $raiz);
 
-    ): array {
+    }
 
-        // A versão e as duas listas são obrigatórias; não aplicar permissões padrão em documento parcial.
+    /**
 
-        if (($dados['versao'] ?? null) !== 1 || !isset($dados['setores'], $dados['regras']) || !is_array($dados['setores']) || !is_array($dados['regras']) || !array_is_list($dados['setores']) || !array_is_list($dados['regras'])) {
+     * Confere setores, vínculos exclusivos de perfil e referências sem conceder capacidades.
 
-            throw new InvalidArgumentException('A política de visibilidade está inválida. Revise a configuração.');
+     */
+
+    public static function validar(array $dados): array {
+
+        // A mudança de versão exige confirmação e impede interpretar concessões antigas como atuais.
+
+        if (($dados['versao'] ?? null) !== 2 || !isset($dados['setores'], $dados['regras']) || !is_array($dados['setores']) || !is_array($dados['regras']) || !array_is_list($dados['setores']) || !array_is_list($dados['regras'])) {
+
+            throw new InvalidArgumentException('O mapa de setores exige atualização ou recuperação para controle exclusivo por perfil.');
 
         }
 
         $setores = [];
 
-        $ids = [];
+        $ids_setores = [];
 
-        // Cada setor exige nome, grupos e entidades; filhos não são incluídos automaticamente.
+        // Setores são pares explícitos de grupos atribuídos e entidades, sem expansão implícita.
 
         foreach ($dados['setores'] as $setor) {
 
-            // Rejeita elementos escalares ou nomes vazios antes de ler os campos.
+            // Nomes vazios ou estruturas parciais nunca representam setores globais.
 
             if (!is_array($setor) || !is_string($setor['nome'] ?? null) || trim($setor['nome']) === '' || strlen($setor['nome']) > 200) {
 
@@ -124,15 +96,15 @@ final class ConfiguracaoDeVisibilidade {
 
             $entidades = self::normalizarLista($setor['entidades_ids'] ?? null, true);
 
-            // Um setor não pode representar todos os grupos ou todas as entidades por seleção vazia.
+            // Seleções vazias e IDs repetidos não podem ampliar ou tornar ambíguo o escopo.
 
-            if (isset($ids[$id]) || $grupos === [] || $entidades === []) {
+            if (isset($ids_setores[$id]) || $grupos === [] || $entidades === []) {
 
                 throw new InvalidArgumentException('Cada setor exige ID único, grupos responsáveis e entidades explícitas.');
 
             }
 
-            $ids[$id] = true;
+            $ids_setores[$id] = true;
 
             $setores[] = ['id' => $id, 'nome' => EntradaDaFerramenta::lerTexto($setor['nome'], 200), 'grupos_ids' => $grupos, 'entidades_ids' => $entidades];
 
@@ -142,43 +114,43 @@ final class ConfiguracaoDeVisibilidade {
 
         $ids_regras = [];
 
-        // Nenhuma regra pode referenciar um setor ausente ou conceder um papel desconhecido.
+        // Um vínculo de perfil limita a supervisão nativa; não concede operação ou administração.
 
         foreach ($dados['regras'] as $regra) {
 
-            // Confere tipos e valores antes de aceitar um alvo de usuário, grupo ou perfil.
+            // Usuários, grupos e papéis do documento antigo são incompatíveis com o cadastro atual.
 
-            if (!is_array($regra) || !in_array($regra['origem'] ?? null, ['usuario', 'grupo', 'perfil'], true) || !in_array($regra['papel'] ?? null, ['tecnico', 'administrador_setor'], true) || !is_bool($regra['ativa'] ?? null)) {
+            if (!is_array($regra) || ($regra['origem'] ?? null) !== 'perfil' || array_key_exists('papel', $regra) || !is_bool($regra['ativa'] ?? null)) {
 
-                throw new InvalidArgumentException('A regra contém origem, papel ou estado inválido.');
+                throw new InvalidArgumentException('Vincule somente perfis; as capacidades são definidas na matriz nativa do GLPI.');
 
             }
 
             $id = EntradaDaFerramenta::lerIdentificador($regra['id'] ?? null);
 
-            $alvo = EntradaDaFerramenta::lerIdentificador($regra['alvo_id'] ?? null);
+            $perfil_id = EntradaDaFerramenta::lerIdentificador($regra['alvo_id'] ?? null);
 
             $setores_da_regra = self::normalizarLista($regra['setores_ids'] ?? null);
 
             $entidades = self::normalizarLista($regra['entidades_ids'] ?? null, true);
 
-            // Regras técnicas não guardam setores; regras administrativas exigem ao menos um.
+            // Todo supervisor exige setores e entidades expressamente definidos.
 
-            if (isset($ids_regras[$id]) || $entidades === [] || ($regra['papel'] === 'administrador_setor' && $setores_da_regra === []) || ($regra['papel'] === 'tecnico' && $setores_da_regra !== [])) {
+            if (isset($ids_regras[$id]) || $setores_da_regra === [] || $entidades === []) {
 
-                throw new InvalidArgumentException('Confira entidades, setores e identificador único da regra.');
+                throw new InvalidArgumentException('Confira entidades, setores e identificador único do vínculo de perfil.');
 
             }
 
-            // Recusa referências removidas, em vez de interpretar ausência como acesso global.
+            // Referências removidas jamais significam acesso a qualquer setor.
 
             foreach ($setores_da_regra as $setor_id) {
 
-                // Cada vínculo deve apontar para um setor existente neste documento.
+                // O setor deve existir no mesmo documento que o vínculo.
 
-                if (!isset($ids[$setor_id])) {
+                if (!isset($ids_setores[$setor_id])) {
 
-                    throw new InvalidArgumentException('A regra referencia um setor que não existe.');
+                    throw new InvalidArgumentException('O vínculo referencia um setor que não existe.');
 
                 }
 
@@ -186,29 +158,27 @@ final class ConfiguracaoDeVisibilidade {
 
             $ids_regras[$id] = true;
 
-            $regras[] = ['id' => $id, 'origem' => $regra['origem'], 'alvo_id' => $alvo, 'papel' => $regra['papel'], 'setores_ids' => $setores_da_regra, 'entidades_ids' => $entidades, 'ativa' => $regra['ativa']];
+            $regras[] = ['id' => $id, 'origem' => 'perfil', 'alvo_id' => $perfil_id, 'setores_ids' => $setores_da_regra, 'entidades_ids' => $entidades, 'ativa' => $regra['ativa']];
 
         }
 
-        return ['versao' => 1, 'setores' => $setores, 'regras' => $regras];
+        return ['versao' => 2, 'setores' => $setores, 'regras' => $regras];
 
     }
 
     /**
-     * Cria, atualiza ou exclui um cadastro após conferir autorização, revisão e catálogos GLPI.
+
+     * Salva um cadastro após autorização, conferência de revisão e validação dos catálogos.
+
      */
 
-    public static function alterar(
-
-        array $entrada
-
-    ): void {
+    public static function alterar(array $entrada): void {
 
         AcessoGlpi::exigirConfiguracao();
 
         $atual = self::consultar();
 
-        // Uma aba antiga não pode sobrescrever configuração alterada por outro administrador.
+        // O hash impede uma aba antiga de sobrescrever alterações de outro administrador.
 
         if (!is_string($entrada['revisao_politica'] ?? null) || !hash_equals(self::assinatura($atual), $entrada['revisao_politica'])) {
 
@@ -216,11 +186,11 @@ final class ConfiguracaoDeVisibilidade {
 
         }
 
-        $dados = $atual ?? ['versao' => 1, 'setores' => [], 'regras' => []];
+        $dados = $atual ?? self::vazia();
 
         $tipo = $entrada['tipo_cadastro'] ?? null;
 
-        // Aceita somente as duas coleções administrativas conhecidas.
+        // Somente as coleções administrativas conhecidas podem ser alteradas.
 
         if (!in_array($tipo, ['setores', 'regras'], true)) {
 
@@ -232,7 +202,7 @@ final class ConfiguracaoDeVisibilidade {
 
         $excluir = ($entrada['excluir'] ?? null) === '1';
 
-        // Exclusão sem ID não pode ativar ou apagar uma política por engano.
+        // Exclusão sem identificador não deve criar ou reiniciar um documento.
 
         if ($excluir && $id === 0) {
 
@@ -240,19 +210,19 @@ final class ConfiguracaoDeVisibilidade {
 
         }
 
-        // A exclusão de setor exige primeiro remover as concessões que o utilizam.
+        // Setores referenciados precisam ser retirados dos vínculos antes da exclusão.
 
         if ($excluir && $tipo === 'setores') {
 
-            // Confere todas as regras, inclusive as inativas, para não deixar referências penduradas.
+            // Vínculos inativos também preservam referências para edição posterior.
 
             foreach ($dados['regras'] as $regra) {
 
-                // Impede remover um setor ainda referenciado por uma concessão.
+                // A exclusão não pode deixar um vínculo administrativo incompleto.
 
                 if (in_array($id, $regra['setores_ids'], true)) {
 
-                    throw new InvalidArgumentException('Remova o setor das regras de acesso antes de excluí-lo.');
+                    throw new InvalidArgumentException('Remova o setor dos vínculos de perfil antes de excluí-lo.');
 
                 }
 
@@ -262,7 +232,7 @@ final class ConfiguracaoDeVisibilidade {
 
         $novo = null;
 
-        // Monta dados novos somente para operações de criação ou edição.
+        // Somente criação e edição precisam interpretar os campos do cadastro.
 
         if (!$excluir) {
 
@@ -270,7 +240,7 @@ final class ConfiguracaoDeVisibilidade {
 
             $id = $id ?: ($ids === [] ? 1 : max($ids) + 1);
 
-            // Setores usam grupos responsáveis; a unidade do formulário não define a fila.
+            // O setor identifica os grupos atribuídos ao chamado, sem autorizar seus integrantes.
 
             if ($tipo === 'setores') {
 
@@ -278,19 +248,15 @@ final class ConfiguracaoDeVisibilidade {
 
             } else {
 
-                // A origem determina qual seletor fornece o alvo; campos restantes não concedem acesso.
+                // Requisições antigas não podem conceder direito por origem ou papel enviado.
 
-                $origem = $entrada['origem'] ?? '';
+                if (($entrada['origem'] ?? 'perfil') !== 'perfil' || array_key_exists('papel', $entrada)) {
 
-                // Recusa estruturas enviadas no lugar da origem antes de formar o nome do seletor.
-
-                if (!in_array($origem, ['usuario', 'grupo', 'perfil'], true)) {
-
-                    throw new InvalidArgumentException('Origem de permissão inválida.');
+                    throw new InvalidArgumentException('O controle de acesso é exclusivo do perfil ativo; ajuste os direitos no GLPI.');
 
                 }
 
-                $novo = ['id' => $id, 'origem' => $origem, 'alvo_id' => $entrada[$origem . '_id'] ?? null, 'papel' => $entrada['papel'] ?? '', 'setores_ids' => self::normalizarLista($entrada['setores_ids'] ?? []), 'entidades_ids' => self::normalizarLista($entrada['entidades_ids'] ?? [], true), 'ativa' => ($entrada['ativa'] ?? null) === '1'];
+                $novo = ['id' => $id, 'origem' => 'perfil', 'alvo_id' => $entrada['perfil_id'] ?? null, 'setores_ids' => self::normalizarLista($entrada['setores_ids'] ?? []), 'entidades_ids' => self::normalizarLista($entrada['entidades_ids'] ?? [], true), 'ativa' => ($entrada['ativa'] ?? null) === '1'];
 
             }
 
@@ -300,11 +266,11 @@ final class ConfiguracaoDeVisibilidade {
 
         $lista = [];
 
-        // Substitui somente o cadastro solicitado, preservando os demais setores e regras.
+        // Modifica somente o identificador solicitado, preservando os demais cadastros.
 
         foreach ($dados[$tipo] as $item) {
 
-            // A edição ou exclusão incide somente sobre o identificador explícito.
+            // A edição substitui e a exclusão remove exatamente a linha identificada.
 
             if ($item['id'] === $id) {
 
@@ -318,7 +284,7 @@ final class ConfiguracaoDeVisibilidade {
 
         }
 
-        // IDs enviados para edição/exclusão precisam existir; criação exige campo vazio.
+        // Um identificador de edição inexistente não pode virar criação silenciosa.
 
         if (($entrada['cadastro_id'] ?? '') !== '' && !$encontrado) {
 
@@ -326,7 +292,7 @@ final class ConfiguracaoDeVisibilidade {
 
         }
 
-        // Uma nova versão substitui a anterior; na exclusão nenhum item é acrescentado.
+        // Exclusões não acrescentam uma linha substituta.
 
         if ($novo !== null) {
 
@@ -340,73 +306,77 @@ final class ConfiguracaoDeVisibilidade {
 
         self::conferirCatalogos($dados);
 
-        // A primeira gravação registra o legado para consulta; nunca converte grupos em gestores.
-
-        if ($atual === null) {
-
-            ConfiguracaoOperacional::salvar('acesso_anterior_a_visibilidade', \Config::getConfigurationValues('admanagement', ['acesso_operacional', 'grupos_e_categorias']));
-
-        }
-
         ConfiguracaoOperacional::salvar('visibilidade', $dados);
 
     }
 
     /**
-     * Confere existência e leitura de cada alvo, grupo e entidade antes da gravação.
+
+     * Confere existência e leitura dos setores e perfis sem alterar recursos do GLPI.
+
      */
 
-    private static function conferirCatalogos(
+    private static function conferirCatalogos(array $dados): void {
 
-        array $dados
-
-    ): void {
-
-        // Confere todos os setores para manter a consistência também durante edições de regras.
+        // Os setores precisam continuar íntegros também quando somente um vínculo é editado.
 
         foreach ($dados['setores'] as $setor) {
 
             self::conferirEntidades($setor['entidades_ids']);
 
-            // Grupos responsáveis precisam existir e estar no escopo nativo do administrador.
+            // Grupos representam responsáveis pelos chamados e precisam existir.
 
             foreach ($setor['grupos_ids'] as $id) {
 
-                self::conferirAlvo('grupo', $id);
+                $grupo = new \Group();
+
+                // Direito de leitura por recurso evita referências administrativas inacessíveis.
+
+                if (!$grupo->can($id, READ)) {
+
+                    throw new InvalidArgumentException('Selecione grupos existentes e acessíveis no GLPI.');
+
+                }
 
             }
 
         }
 
-        // Concessões individuais também exigem usuário ativo e acessível no GLPI.
+        // O mapa é restrito a perfis centrais que o administrador consegue consultar.
 
         foreach ($dados['regras'] as $regra) {
 
             self::conferirEntidades($regra['entidades_ids']);
 
-            self::conferirAlvo($regra['origem'], $regra['alvo_id']);
+            $perfil = new \Profile();
+
+            // Um perfil removido ou de autoatendimento não pode supervisionar o plugin técnico.
+
+            if (!$perfil->can($regra['alvo_id'], READ) || ($perfil->fields['interface'] ?? null) !== 'central') {
+
+                throw new InvalidArgumentException('Selecione um perfil central existente e acessível no GLPI.');
+
+            }
 
         }
 
     }
 
     /**
-     * Valida entidades explícitas sem expandir filhos ou aceitar curingas.
+
+     * Mantém a configuração restrita às entidades explicitamente acessíveis.
+
      */
 
-    private static function conferirEntidades(
+    private static function conferirEntidades(array $ids): void {
 
-        array $ids
-
-    ): void {
-
-        // Cada entidade deve existir e estar disponível ao administrador que está configurando.
+        // Cada entidade precisa existir e estar dentro do alcance nativo do administrador.
 
         foreach ($ids as $id) {
 
             $entidade = new \Entity();
 
-            // Nem mesmo uma regra administrativa pode apontar para entidade fora do direito nativo.
+            // A configuração do plugin nunca cria direitos sobre outras entidades.
 
             if (!$entidade->getFromDB($id) || !\Session::haveAccessToEntity($id)) {
 
@@ -419,55 +389,65 @@ final class ConfiguracaoDeVisibilidade {
     }
 
     /**
-     * Usa o modelo nativo correspondente para impedir referências inexistentes ou inacessíveis.
+
+     * Prepara uma migração recuperável sem ativá-la nem conceder direitos nativos.
+
      */
 
-    private static function conferirAlvo(
+    public static function consultarMigracao(): ?array {
 
-        string $origem,
+        $dados = ConfiguracaoOperacional::consultar('visibilidade');
 
-        int $id
+        // Somente a estrutura anterior conhecida pode oferecer migração automática dos mapas.
 
-    ): void {
+        if (($dados['versao'] ?? null) !== 1 || !isset($dados['setores'], $dados['regras']) || !is_array($dados['setores']) || !is_array($dados['regras']) || !array_is_list($dados['setores']) || !array_is_list($dados['regras'])) {
 
-        $classe = match ($origem) {'usuario' => \User::class, 'grupo' => \Group::class, 'perfil' => \Profile::class};
-
-        $item = new $classe();
-
-        // O direito por recurso GLPI é obrigatório também para catálogos administrativos.
-
-        if (!$item->can($id, READ)) {
-
-            throw new InvalidArgumentException('O usuário, grupo ou perfil não existe ou está fora do seu direito de leitura.');
+            return null;
 
         }
 
-        // Um usuário removido ou desativado não pode receber uma nova concessão.
+        $novo = self::vazia();
 
-        if ($origem === 'usuario' && (!empty($item->fields['is_deleted']) || empty($item->fields['is_active']))) {
+        $novo['setores'] = $dados['setores'];
 
-            throw new InvalidArgumentException('Selecione um usuário ativo no GLPI.');
+        // Apenas relações administrativas de perfil preservam o mesmo significado setorial.
+
+        foreach ($dados['regras'] as $regra) {
+
+            // Usuários, grupos e regras técnicas antigas nunca viram permissões de perfil.
+
+            if (!is_array($regra) || ($regra['origem'] ?? null) !== 'perfil' || ($regra['papel'] ?? null) !== 'administrador_setor') {
+
+                continue;
+
+            }
+
+            unset($regra['papel']);
+
+            $novo['regras'][] = $regra;
 
         }
+
+        return self::validar($novo);
 
     }
 
     /**
-     * Identifica a versão administrativa sem confiar em contadores enviados pela página.
+
+     * Identifica a revisão do mapa sem confiar em contadores enviados pelo formulário.
+
      */
 
-    public static function assinatura(
-
-        ?array $dados
-
-    ): string {
+    public static function assinatura(?array $dados): string {
 
         return hash('sha256', json_encode($dados, JSON_THROW_ON_ERROR));
 
     }
 
     /**
-     * Identifica o documento bruto para confirmar a recuperação de uma configuração corrompida.
+
+     * Identifica o documento bruto para confirmar a migração ou recuperação exibida.
+
      */
 
     public static function assinaturaDoDocumento(): string {
@@ -479,26 +459,24 @@ final class ConfiguracaoDeVisibilidade {
     }
 
     /**
-     * Preserva o documento inválido e reinicia somente a política própria após confirmação administrativa.
+
+     * Preserva o original e aplica somente a migração ou recuperação confirmada.
+
      */
 
-    public static function restaurar(
-
-        array $entrada
-
-    ): void {
+    public static function restaurar(array $entrada): void {
 
         AcessoGlpi::exigirConfiguracao();
 
-        // A confirmação identifica o documento efetivamente apresentado, impedindo sobrescrever uma correção recente.
+        // O administrador confirma exatamente o documento que viu na tela.
 
         if (($entrada['confirmar_restauracao'] ?? null) !== '1' || !is_string($entrada['revisao_documento'] ?? null) || !hash_equals(self::assinaturaDoDocumento(), $entrada['revisao_documento'])) {
 
-            throw new InvalidArgumentException('Confirme a recuperação da configuração apresentada.');
+            throw new InvalidArgumentException('Confirme a atualização ou recuperação da configuração apresentada.');
 
         }
 
-        $corrompida = false;
+        $invalida = false;
 
         try {
 
@@ -506,25 +484,39 @@ final class ConfiguracaoDeVisibilidade {
 
         } catch (\DomainException | InvalidArgumentException $erro) {
 
-            // Recuperação se aplica somente a documento que a validação não consegue utilizar.
+            // Somente documentos antigos ou inválidos podem passar por esta recuperação.
 
-            $corrompida = true;
+            $invalida = true;
 
         }
 
-        // Uma política válida deve ser editada pelos cadastros, sem apagar suas concessões em bloco.
+        // Um POST repetido não deve apagar um mapa atual e válido.
 
-        if (!$corrompida) {
+        if (!$invalida) {
 
-            throw new InvalidArgumentException('A política está válida. Utilize a edição de setores e permissões.');
+            throw new InvalidArgumentException('O mapa está válido. Utilize a edição de setores e vínculos.');
+
+        }
+
+        $novo = null;
+
+        try {
+
+            $novo = self::consultarMigracao();
+
+        } catch (\DomainException | InvalidArgumentException $erro) {
+
+            // Um documento impossível de migrar permanece preservado integralmente no backup.
+
+            $novo = null;
 
         }
 
         $valores = \Config::getConfigurationValues('admanagement', ['visibilidade']);
 
-        ConfiguracaoOperacional::salvar('backup_visibilidade_corrompida', ['documento' => $valores['visibilidade'], 'instante' => gmdate(DATE_ATOM)]);
+        ConfiguracaoOperacional::salvar('backup_visibilidade_anterior', ['documento' => $valores['visibilidade'], 'instante' => gmdate(DATE_ATOM)]);
 
-        ConfiguracaoOperacional::salvar('visibilidade', ['versao' => 1, 'setores' => [], 'regras' => []]);
+        ConfiguracaoOperacional::salvar('visibilidade', $novo ?? self::vazia());
 
     }
 

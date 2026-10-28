@@ -10,6 +10,10 @@ $ErrorActionPreference = 'Stop'
 
 $raizDosTestes = $PSScriptRoot
 
+# Resolve o executável uma vez para evitar depender de aliases ao chamar cada suíte.
+
+$ExecutavelPhp = (Get-Command -Name $ExecutavelPhp -CommandType Application -ErrorAction Stop).Source
+
 # Percorre todas as suítes independentes, incluindo a cobertura dos comentários do próprio código.
 
 foreach (
@@ -24,6 +28,8 @@ foreach (
 
         'fluxo',
 
+        'fluxo_perfis',
+
         'regras_http',
 
         'regras_vigentes',
@@ -31,6 +37,8 @@ foreach (
         'concorrencia',
 
         'visibilidade',
+
+        'consultas_nativas',
 
         'documentacao'
 
@@ -50,4 +58,4 @@ foreach (
 
 }
 
-Write-Output 'Todas as nove suítes passaram.'
+Write-Output 'Todas as onze suítes passaram.'

@@ -4,18 +4,20 @@ namespace GlpiPlugin\Admanagement;
 
 use Config;
 
-use InvalidArgumentException;
+use DomainException;
+
+use JsonException;
 
 use RuntimeException;
 
 /**
- * Guarda escolhas administrativas próprias sem criar tabelas nem conceder direitos.
+ * Persiste documentos próprios na configuração nativa do GLPI, sem conceder direitos.
  */
 
 final class ConfiguracaoOperacional {
 
     /**
-     * Lê uma chave própria e falha fechada quando o documento salvo não é válido.
+     * Lê uma chave do plugin e recusa documentos inválidos sem liberar valores parciais.
      */
 
     public static function consultar(
@@ -28,9 +30,9 @@ final class ConfiguracaoOperacional {
 
         $valores = Config::getConfigurationValues('admanagement', [$chave]);
 
-        // Usa o padrão informado quando a chave própria ainda não existe no GLPI.
+        // Somente a ausência da chave usa o padrão escolhido pelo chamador.
 
-        if (!isset($valores[$chave])) {
+        if (!array_key_exists($chave, $valores)) {
 
             return $padrao;
 
@@ -38,33 +40,47 @@ final class ConfiguracaoOperacional {
 
         try {
 
+            // Tipos diferentes de texto não representam um documento JSON persistido.
+
+            if (!is_string($valores[$chave])) {
+
+                throw new DomainException('A configuração própria está inválida.');
+
+            }
+
             $dados = json_decode($valores[$chave], true, 32, JSON_THROW_ON_ERROR);
 
-            // Interrompe a leitura quando o documento salvo não tem a estrutura esperada.
+            // A configuração sempre precisa representar uma lista ou um objeto de trabalho.
 
             if (!is_array($dados)) {
 
-                throw new \DomainException('A configuração própria está inválida.');
+                throw new DomainException('A configuração própria está inválida.');
 
             }
 
             return $dados;
 
-        } catch (\JsonException $erro) {
+        } catch (JsonException $erro) {
 
-            // Bloqueia configuração JSON inválida em vez de substituí-la silenciosamente por permissões padrão.
+            // Preserva a falha do documento em vez de substituí-lo por permissões padrão.
 
-            throw new \DomainException('A configuração própria está inválida. Revise antes de continuar.');
+            throw new DomainException('A configuração própria está inválida. Revise antes de continuar.', 0, $erro);
 
         }
 
     }
 
     /**
-     * Persiste somente escolhas validadas pelo chamador, usando o direito administrativo nativo.
+     * Exige administração nativa e confirma a persistência antes de anunciar sucesso.
      */
 
-    public static function salvar( string $chave, array $dados ): void {
+    public static function salvar(
+
+        string $chave,
+
+        array $dados
+
+    ): void {
 
         AcessoGlpi::exigirConfiguracao();
 
@@ -72,13 +88,11 @@ final class ConfiguracaoOperacional {
 
         Config::setConfigurationValues('admanagement', [$chave => $json]);
 
-        // Confirma o salvamento por releitura antes de anunciar sucesso ao administrador.
+        $persistido = Config::getConfigurationValues('admanagement', [$chave]);
 
-        if (
+        // O método nativo retorna void; a releitura identifica eventual falha silenciosa.
 
-            (Config::getConfigurationValues('admanagement', [$chave])[$chave] ?? null) !== $json
-
-        ) {
+        if (($persistido[$chave] ?? null) !== $json) {
 
             throw new RuntimeException('A gravação da configuração não foi confirmada.');
 
@@ -86,95 +100,4 @@ final class ConfiguracaoOperacional {
 
     }
 
-    /**
-     * Valida os IDs de perfil e entidade sem aceitar curingas ou valores parcialmente numéricos.
-     */
-
-    public static function salvarAcesso( array $entrada ): void {
-
-        $acesso = [];
-
-        // Valida perfis e entidades nos respectivos modelos nativos do GLPI.
-
-        foreach (
-
-            [
-
-                'perfis_permitidos' => \Profile::class,
-
-                'entidades_permitidas' => \Entity::class
-
-            ] as $campo => $classe
-
-        ) {
-
-            $valores = $entrada[$campo] ?? [];
-
-            // Interpreta a seleção vazia do controle nativo como uma lista sem permissões.
-
-            if ($valores === '') {
-
-                $valores = [];
-
-            }
-
-            // Rejeita valores isolados ou arrays associativos no lugar das listas de acesso.
-
-            if (!is_array($valores) || !array_is_list($valores)) {
-
-                throw new InvalidArgumentException('Envie listas de perfis e entidades.');
-
-            }
-
-            $acesso[$campo] = [];
-
-            // Confere cada perfil ou entidade selecionada antes de salvar o conjunto.
-
-            foreach ($valores as $valor) {
-
-                // Permite o ID zero somente para a entidade raiz explicitamente selecionada.
-
-                if ($campo === 'entidades_permitidas' && ($valor === '0' || $valor === 0)) {
-
-                    $id = 0;
-
-                } else {
-
-                    // Exige um identificador positivo para os demais perfis e entidades.
-
-                    $id = EntradaDaFerramenta::lerIdentificador($valor);
-
-                }
-
-                $item = new $classe();
-
-                // Recusa um item inexistente ou uma entidade que o administrador não pode acessar.
-
-                if (
-
-                    !$item->getFromDB($id)
-
-                    || ($campo === 'entidades_permitidas'
-
-                    && !\Session::haveAccessToEntity($id))
-
-                ) {
-
-                    throw new InvalidArgumentException('Há um perfil ou entidade fora do catálogo autorizado.');
-
-                }
-
-                $acesso[$campo][] = $id;
-
-            }
-
-            $acesso[$campo] = array_values(array_unique($acesso[$campo]));
-
-        }
-
-        self::salvar('acesso_operacional', $acesso);
-
-    }
-
 }
-

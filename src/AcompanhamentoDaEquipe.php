@@ -2,20 +2,26 @@
 
 namespace GlpiPlugin\Admanagement;
 
-use CommonITILActor;
+use DbUtils;
 
 use DomainException;
 
-use Ticket;
+use Group_User;
+
+use User;
 
 /**
- * Consulta atendimento coletivo sem confundir histórico de chamados com efeitos no AD.
+
+ * Consulta atendimento coletivo usando o escopo do perfil e os catálogos nativos do GLPI.
+
  */
 
 final class AcompanhamentoDaEquipe {
 
     /**
-     * Reutiliza a conexão GLPI recebida, sem conexão paralela ou gravações.
+
+     * Compartilha a conexão já aberta pelo GLPI sem criar conexão ou gravação paralela.
+
      */
 
     public function __construct(
@@ -27,7 +33,9 @@ final class AcompanhamentoDaEquipe {
     }
 
     /**
-     * Obtém os técnicos dos grupos autorizados, sem fabricar integrantes da equipe.
+
+     * Obtém integrantes ativos dos setores autorizados pelo catálogo nativo de grupos e usuários.
+
      */
 
     public function listarTecnicos(
@@ -36,7 +44,7 @@ final class AcompanhamentoDaEquipe {
 
     ): array {
 
-        // Evita consultar integrantes quando nenhum grupo de equipe foi configurado.
+        // Sem grupos de setor não há integrantes para consultar.
 
         if ($grupos === []) {
 
@@ -44,65 +52,35 @@ final class AcompanhamentoDaEquipe {
 
         }
 
-        $criterios = [
+        $tecnicos = [];
 
-            'SELECT' => [
+        $formatador = new DbUtils();
 
-                'glpi_users.id',
+        $condicoes = [
 
-                'glpi_users.name',
+            User::getTable() . '.is_deleted' => 0,
 
-                'glpi_users.firstname',
-
-                'glpi_users.realname'
-
-            ],
-
-            'DISTINCT' => true,
-
-            'FROM' => 'glpi_users',
-
-            'INNER JOIN' => [
-
-                'glpi_groups_users' => [
-
-                    'FKEY' => [
-
-                        'glpi_groups_users' => 'users_id',
-
-                        'glpi_users' => 'id'
-
-                    ]
-
-                ],
-
-            ],
-
-            'WHERE' => [
-
-                'glpi_groups_users.groups_id' => $grupos,
-
-                'glpi_users.is_deleted' => 0,
-
-                'glpi_users.is_active' => 1
-
-            ],
-
-            'ORDER' => ['glpi_users.name ASC'],
+            User::getTable() . '.is_active' => 1,
 
         ];
 
-        $tecnicos = [];
+        // A API nativa conserva o vínculo aos grupos; nomes seguem as preferências do GLPI.
 
-        // Monta o catálogo de técnicos ativos com nome de apresentação e ID nativo.
+        foreach (Group_User::getGroupUsers($grupos, $condicoes) as $usuario) {
 
-        foreach ($this->banco->request($criterios) as $linha) {
+            $id = (int) $usuario['id'];
 
-            $id = (int) $linha['id'];
+            $tecnicos[$id] = $formatador->formatUserName(
 
-            $nome = trim(($linha['firstname'] ?? '') . ' ' . ($linha['realname'] ?? ''));
+                $id,
 
-            $tecnicos[$id] = $nome !== '' ? $nome : (string) $linha['name'];
+                $usuario['name'] ?? '',
+
+                $usuario['realname'] ?? '',
+
+                $usuario['firstname'] ?? ''
+
+            );
 
         }
 
@@ -111,7 +89,9 @@ final class AcompanhamentoDaEquipe {
     }
 
     /**
-     * Lista tickets da equipe inteira ou de um técnico, preservando entidade e direito por recurso.
+
+     * Apresenta fila ou histórico no mesmo escopo, com filtro opcional que apenas reduz a consulta.
+
      */
 
     public function consultar(
@@ -119,8 +99,6 @@ final class AcompanhamentoDaEquipe {
         array $contexto,
 
         array $categorias,
-
-        array $grupos,
 
         ?int $tecnico,
 
@@ -132,19 +110,9 @@ final class AcompanhamentoDaEquipe {
 
         $escopo = $contexto['visibilidade'] ?? ['papel' => 'tecnico', 'vinculos' => []];
 
-        $grupos_autorizados = [];
-
-        // O catálogo de filtros administrativos vem somente dos setores concedidos.
-
-        foreach ($escopo['vinculos'] as $vinculo) {
-
-            $grupos_autorizados = array_merge($grupos_autorizados, $vinculo['grupos_ids']);
-
-        }
-
         $tecnicos = [];
 
-        // A visão técnica não enumera colegas; o filtro é limitado ao usuário conectado.
+        // O técnico não enumera colegas nem usa um grupo como concessão de acesso.
 
         if ($escopo['papel'] === 'tecnico') {
 
@@ -152,13 +120,23 @@ final class AcompanhamentoDaEquipe {
 
         } elseif ($escopo['papel'] === 'administrador_setor') {
 
-            // Grupos de acesso antigos não são tratados como setores administrados.
+            // O catálogo administrativo inclui somente grupos dos setores associados ao perfil.
+
+            $grupos_autorizados = [];
+
+            // Reúne integrantes sem misturar o catálogo com os pares de autorização da consulta.
+
+            foreach ($escopo['vinculos'] as $vinculo) {
+
+                $grupos_autorizados = array_merge($grupos_autorizados, $vinculo['grupos_ids']);
+
+            }
 
             $tecnicos = $this->listarTecnicos(array_values(array_unique($grupos_autorizados)));
 
         }
 
-        // O Super-Admin pode consultar qualquer técnico por ID; o filtro nunca amplia leitura nativa.
+        // Um técnico selecionado fora do catálogo não amplia o escopo do perfil.
 
         if ($tecnico !== null && $escopo['papel'] !== 'super_administrador' && !isset($tecnicos[$tecnico])) {
 
@@ -175,4 +153,5 @@ final class AcompanhamentoDaEquipe {
     }
 
 }
+
 

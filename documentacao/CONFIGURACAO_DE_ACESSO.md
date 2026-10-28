@@ -1,52 +1,59 @@
-# Configurar setores e permissões
+# Configurar acesso por perfil
 
-O setor responsável corresponde ao **grupo em Atribuído do chamado**. O setor de lotação escrito no formulário ou a localização não define a fila do plugin. O técnico responsável também deve estar em Atribuído para receber o chamado na fila pessoal.
+ADManagement 0.7.0 — documentação do código em 28/10/2026. A autorização vem exclusivamente do **perfil ativo**. Pertencer a um grupo ou constar como usuário em uma configuração antiga não concede acesso.
 
-## Hierarquia
+## Direitos e hierarquia
 
-| Papel | Chamados visíveis | Configuração global |
+| Perfil/capacidade | Chamados visíveis | Configuração global |
 | --- | --- | --- |
-| Super-Admin ativo com config/UPDATE | Todos os permitidos pelo GLPI nas entidades ativas, mesmo sem atribuição | Sim |
-| Administrador de setor | Somente grupos responsáveis dos setores explicitamente concedidos, nas entidades correspondentes | Não |
-| Técnico | Somente atribuição individual ao próprio usuário | Não |
+| Superadministrador nativo com `config/UPDATE` | Todos os permitidos pelo GLPI nas entidades ativas | Sim |
+| Perfil com `plugin_admanagement/UPDATE` | Somente setores vinculados ao perfil, nas entidades correspondentes | Não |
+| Perfil com `plugin_admanagement/READ` | Somente chamados atribuídos individualmente ao próprio técnico | Não |
+| Perfil sem essas capacidades | Sem acesso | Não |
 
-O GLPI conserva seus direitos nativos de leitura e entidade. Concessões no plugin não substituem direitos do perfil GLPI. Solucionados e fechados ficam no Histórico; lixeira não aparece. Pendências também oculta metadados de chamados fora do alcance atual.
+A identificação do superadministrador usa o critério nativo de perfil central que pode editar outros perfis; não depende do nome “Super-Admin”. O direito `config/UPDATE` também é obrigatório. Supervisão (UPDATE) prevalece sobre operação pessoal (READ): um supervisor sem setores vinculados fica sem acesso, inclusive quando READ está marcado.
 
-## Passo a passo
+As entidades e a leitura de cada chamado continuam sujeitas ao GLPI. Ter direito do plugin não substitui `Ticket::can(READ)`. O técnico precisa estar em **Atribuído** como usuário; requerente e observador não correspondem a essa atribuição. Para supervisão, o setor corresponde aos grupos responsáveis em **Atribuído**, sem usar lotação do formulário ou localização como autorização.
 
-1. Entre como **Super-Admin**, com direito nativo de alterar configuração.
-2. Abra **ADManagement → Configurações → Setores e permissões**.
-3. Cadastre um setor, por exemplo **Rede**, selecione seus grupos responsáveis reais e as entidades em que ele atua. Use os seletores GLPI; não copie IDs de outra instalação. Pode haver mais de um grupo por setor.
-4. Em **Conceder permissão**, escolha **Usuário individual**, **Grupo GLPI** ou **Perfil ativo**. Preencha o destinatário correspondente à origem escolhida; os demais campos não concedem acesso.
-5. Escolha o papel **Técnico** ou **Administrador dos setores selecionados**. Técnico exige setores vazios; administrador exige ao menos um setor. Selecione as entidades da concessão e mantenha a permissão ativa.
-6. Salve e confira a linha exibida na tabela. Use **Editar** para alterar ou desativar a concessão. A exclusão exige confirmação; remova vínculos das regras antes de excluir um setor.
-7. Configure as **categorias ITIL da operação** separadamente. Elas permitem importação, sem esconder outros chamados autorizados.
+## Instalação ou atualização
 
-**Primeira gravação:** a política nova passa a valer ao salvar o primeiro setor ou concessão. As listas antigas são preservadas em backup, mas deixam de conceder acesso. O Super-Admin continua acessando; cadastre em seguida as concessões dos demais usuários. Antes dessa ativação, quem atende à configuração anterior entra exclusivamente como técnico. Grupos antigos nunca viram administradores automaticamente.
+1. Atualize os arquivos para 0.7.0 e execute a instalação/atualização pela administração de plugins do GLPI.
+2. O hook registra a chave nativa `plugin_admanagement` sem conceder direitos. A instalação é idempotente e não promove o perfil instalador.
+3. Entre com o perfil administrativo nativo autorizado e abra **Administração → Perfis → perfil da interface central → ADManagement**.
+4. Para técnicos, marque **Operar atribuições pessoais**. Para administradores de setor, marque **Supervisionar setores vinculados**. Salve o formulário nativo de perfil.
+5. Ative o perfil correspondente na sessão para conferir seu resultado. Direitos de outros perfis vinculados ao usuário não são somados.
+
+## Setores e vínculos de supervisão
+
+1. Abra **ADManagement → Configurações → Setores e vínculos de perfil**.
+2. Cadastre um setor, selecione seus grupos responsáveis reais e as entidades em que atua. Um setor pode ter mais de um grupo.
+3. No formulário de vínculo, selecione o perfil central, os setores atendidos e as entidades explícitas; mantenha o vínculo ativo e salve.
+4. Confira o cadastro na tabela. Edição e exclusão conferem a revisão atual do documento para impedir sobrescrita por uma aba antiga. A exclusão exige confirmação; retire o setor dos vínculos antes de excluí-lo.
+5. Configure as **categorias ITIL da operação** separadamente. Elas restringem importação, sem ocultar outros chamados do escopo autorizado.
+
+O mapa não concede READ ou UPDATE: ele apenas limita o alcance de um perfil que já tenha supervisão nativa. Grupos e entidades permanecem pareados por setor para não cruzar permissões. Selecione explicitamente subgrupos e entidades filhas necessários. A seleção nativa de entidades também precisa incluí-los.
 
 ## Exemplos
 
-| Conceder por | Destinatário selecionado | Papel | Setores |
-| --- | --- | --- | --- |
-| Perfil ativo | Técnico Rede | Técnico | Vazio |
-| Usuário individual | Usuário escolhido no catálogo | Administrador de setor | Rede |
-| Grupo GLPI | Grupo de gestores escolhido pelo administrador | Administrador de setor | Suporte ADM |
-| Usuário individual | Outro usuário escolhido | Técnico | Vazio |
+| Capacidade do perfil ativo | Mapa | Resultado |
+| --- | --- | --- |
+| Técnico Rede: READ | Nenhum vínculo necessário | Somente chamados atribuídos ao técnico conectado |
+| Gestor Rede: UPDATE | Setor Rede nas entidades selecionadas | Chamados dos grupos responsáveis desse setor, mesmo com outro técnico atribuído |
+| Gestor Saúde: UPDATE | Setor Suporte Saúde nas entidades selecionadas | Somente os chamados desse setor no alcance nativo |
+| Perfil sem direito | Participação em qualquer grupo | Sem acesso ao plugin |
 
-Um técnico do grupo Rede vê somente chamados individualmente atribuídos a ele. Um administrador de Rede vê os chamados atribuídos aos grupos desse setor mesmo quando outro técnico os atende. Um usuário sem grupo pode receber permissão individual, mantendo o direito nativo GLPI obrigatório.
+Dois usuários com o mesmo perfil ativo compartilham suas capacidades e o mapa desse perfil. Para administrar setores diferentes, use perfis distintos ou contextos de entidade que os distingam. A atribuição individual continua separando a fila dos técnicos.
 
-As regras são **cumulativas**: usuário OU grupo OU perfil ativo pode conceder acesso. Havendo concessões administrativas, vale a união dos setores explícitos. Administração prevalece sobre o papel técnico e permanece limitada aos setores, inclusive quando existir uma atribuição pessoal em outro setor. Uma regra técnica não revoga uma administrativa. Não há regra de negação individual nesta versão; para retirar acesso, desative todas as concessões que alcançam a pessoa.
+## Migração de uma configuração anterior
 
-Perfil é avaliado somente quando está ativo na sessão. Nenhum cadastro inclui filhos automaticamente: selecione explicitamente subgrupos e entidades filhas necessários. Grupos e entidades permanecem pareados por setor para não cruzar permissões de setores diferentes.
+Documentos de visibilidade versão 1 não são interpretados como permissões atuais. O superadministrador vê uma prévia e confirma a atualização. A migração preserva o documento anterior em backup, todos os setores válidos e somente os vínculos administrativos cuja origem já era perfil. Concessões por usuário, grupo e regras técnicas antigas não se transformam em direitos de perfil.
 
-## Quando o chamado aparece e não permite importar
+Depois da confirmação, configure os direitos na matriz nativa. Se o documento não tiver estrutura recuperável, a recuperação explícita preserva o original e reinicia o mapa vazio. A recuperação não apaga uma política atual válida.
 
-A lista informa o motivo: categoria operacional ausente ou diferente, vínculo de rede ausente/ambíguo, outro papel de serviço, falta de aprovação ou serviço não previsto. Um chamado de e-mail atribuído a Rede pode ficar visível e continuar fora da operação de rede. Importação continua exigindo vínculo único, aprovação status 3, solicitação de rede e tipo CADASTRO ou RENOVAR USUÁRIO.
+## Revisão e limites
 
-Fila, abertura por ID, GET/POST, filtros, visão geral, histórico e pendências revalidam o alcance no servidor. Alteração de papel, grupos, perfil, entidade ou política invalida o resumo observado. Mudança de atribuição é conferida antes de usar o chamado novamente.
+Fila, URL direta, GET/POST, visão geral, histórico, pendências e auditoria revalidam o mesmo alcance no servidor. Histórico inclui solucionados e fechados; lixeira não aparece. Categoria diferente, vínculo de rede ausente/ambíguo ou origem sem aprovação impedem importação e apresentam o motivo.
 
-## Recuperação e limites
+Troca de perfil, direitos, entidades ou mapa invalida o resumo observado. A entidade ativa é distinta da entidade do chamado: abrir um chamado de entidade filha autorizada não invalida seu resumo por si só. Uma troca real de contexto observada torna o desafio anterior inutilizável.
 
-Uma política inválida bloqueia os demais usuários. O Super-Admin recebe a opção **Recuperar política de acesso**: exige confirmação, preserva o documento inválido em backup e reinicia setores e regras vazios. Depois é necessário cadastrar novas concessões. Uma política válida não pode ser apagada por essa recuperação.
-
-Os cadastros editam somente configurações próprias do plugin. Não criam grupos/perfis, não alteram atribuições de chamados, não gravam no AD e não fecham chamados. Os testes locais utilizam dublês; a conferência na instalação GLPI real é necessária após atualizar o plugin.
+O cadastro não cria perfis/grupos nem altera atribuições. A confirmação registra somente revisão local; não grava no AD e não fecha chamados. As suítes locais usam dublês. Homologação no GLPI real continua necessária.
