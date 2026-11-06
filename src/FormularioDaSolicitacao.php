@@ -98,7 +98,7 @@ final class FormularioDaSolicitacao {
 
                 echo '<button class="btn btn-outline-primary btn-sm w-100" name="acao" value="importar">Importar / continuar revisão</button>';
 
-                // O helper inclui o token; a validação acontece no listener nativo GLPI 11.
+                // O helper fecha o formulário; o GLPI 12 valida a origem no listener nativo.
 
                 Html::closeForm();
 

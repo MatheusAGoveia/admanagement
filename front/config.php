@@ -22,9 +22,7 @@ use GlpiPlugin\Admanagement\ApresentacaoDaVisibilidade;
 
 use GlpiPlugin\Admanagement\InterfaceDaFerramenta;
 
-// Carrega a sessão, as classes e a conexão que pertencem ao GLPI.
-
-require_once __DIR__ . '/../../../inc/includes.php';
+// O kernel do GLPI já carregou a sessão, as classes e a conexão da aplicação.
 
 // A permissão administrativa é conferida antes de mostrar ou salvar a tela.
 
@@ -34,9 +32,9 @@ $erro_configuracao = null;
 
 $configuracao = ConfiguracaoDaFila::consultar();
 
-// No GLPI 11, o listener nativo valida e consome o token CSRF antes desta entrada.
+// No GLPI 12, o listener nativo verifica os cabeçalhos de origem antes desta entrada.
 
-// Não validar novamente aqui: um segundo consumo recusaria um POST legítimo.
+// Não duplicar a validação nem exigir um token que deixou de fazer parte dos formulários.
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
@@ -87,8 +85,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // O redirecionamento evita reenviar o POST ao atualizar a página.
 
         Html::redirect(EnderecoDaFerramenta::raiz() . '/front/config.php');
-
-        exit;
 
     } catch (RedirectException $erro) {
 

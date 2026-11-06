@@ -4,7 +4,7 @@
 
 use GlpiPlugin\Admanagement\PaginaDaEquipe;
 
-require_once __DIR__ . '/../../../inc/includes.php';
+// O kernel do GLPI já inicializou o contexto antes de incluir esta entrada.
 
 PaginaDaEquipe::mostrar(false);
 

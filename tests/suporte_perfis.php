@@ -2,6 +2,8 @@
 
 use GlpiPlugin\Admanagement\PerfilDaFerramenta;
 
+require_once __DIR__ . '/suporte_reautenticacao.php';
+
 // Estes dublês existem somente nas suítes isoladas e não acessam banco, GLPI ou AD.
 
 define('READ', 1);
@@ -496,13 +498,13 @@ class Html {
 
     /**
 
-     * Fecha o formulário e sinaliza a proteção CSRF nativa.
+     * Fecha o formulário conforme o GLPI 12, cuja proteção CSRF acontece no kernel.
 
      */
 
     public static function closeForm(): void {
 
-        echo '<input name="_glpi_csrf_token" value="sintetico"></form>';
+        echo '</form>';
 
     }
 

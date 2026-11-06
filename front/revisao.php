@@ -36,11 +36,9 @@ use GlpiPlugin\Admanagement\RepositorioDeRascunhos;
 
 use GlpiPlugin\Admanagement\RevisorDaOperacao;
 
-// Reutiliza as classes, a sessão e a conexão já oferecidas pelo GLPI.
+// O kernel já carregou as classes, a sessão e a conexão pertencentes ao GLPI.
 
-require_once __DIR__ . '/../../../inc/includes.php';
-
-// O GLPI 11 inclui esta entrada dentro de um controlador; importa a conexão para esse escopo.
+// O controlador inclui a entrada em seu próprio escopo; importa a conexão nativa.
 
 global $DB;
 
@@ -212,8 +210,6 @@ try {
 
         Html::redirect($url_plugin . '/front/index.php');
 
-        exit;
-
     }
 
     // A origem é relida também no GET; rascunho salvo não mantém uma aprovação antiga válida.
@@ -244,7 +240,7 @@ try {
 
     }
 
-    // --- AÇÕES POST; O LISTENER NATIVO DO GLPI 11 JÁ CONFERIU O TOKEN CSRF ---
+    // --- AÇÕES POST; O LISTENER NATIVO DO GLPI 12 JÁ CONFERIU A ORIGEM ---
 
     if ($metodo === 'POST') {
 
@@ -431,15 +427,13 @@ try {
 
         Html::redirect($url_revisao . '?id=' . $chamado_id);
 
-        exit;
-
     }
 
 } catch (AccessDeniedHttpException | RedirectException $erro) {
 
     // Preserva a recusa de acesso e o redirecionamento como sinais nativos do kernel GLPI.
 
-    // Devolve ao kernel as recusas de acesso e os redirecionamentos nativos do GLPI 11.
+    // Devolve ao kernel as recusas de acesso e os redirecionamentos nativos do GLPI 12.
 
     throw $erro;
 

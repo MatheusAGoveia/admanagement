@@ -4,6 +4,8 @@ namespace GlpiPlugin\Admanagement;
 
 use Glpi\Exception\Http\AccessDeniedHttpException;
 
+use Glpi\Security\ReAuth\ReAuthManager;
+
 use Plugin;
 
 use Profile;
@@ -61,6 +63,11 @@ final class AcessoGlpi {
             throw new AccessDeniedHttpException('Você não tem permissão para configurar o ADManagement.');
 
         }
+
+        // O GLPI 12 exige identidade recente para catálogos sensíveis, como grupos e perfis.
+        // A reautenticação confirma o administrador; não concede direitos nem aprova solicitações.
+
+        ReAuthManager::getInstance()->checkReAuthenticationOrRedirect();
 
     }
 

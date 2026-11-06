@@ -16,7 +16,7 @@ final class EnderecoDaFerramenta {
 
         global $CFG_GLPI;
 
-        // No GLPI 11, os recursos são publicados em /plugins/ mesmo quando instalados no marketplace.
+        // O GLPI publica recursos em /plugins/ mesmo quando a instalação física é no marketplace.
 
         return rtrim((string) ($CFG_GLPI['root_doc'] ?? ''), '/') . '/plugins/admanagement';
 

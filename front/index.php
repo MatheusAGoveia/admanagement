@@ -24,9 +24,9 @@ use GlpiPlugin\Admanagement\MenuDaFerramenta;
 
 // A entrada depende do bootstrap oficial, no diretório plugins/ ou marketplace/.
 
-require_once __DIR__ . '/../../../inc/includes.php';
+// O kernel do GLPI já preparou a aplicação antes de incluir esta entrada.
 
-// O GLPI 11 inclui esta entrada dentro de um controlador; importa a conexão para esse escopo.
+// O controlador inclui esta entrada em escopo próprio; importa a conexão nativa.
 
 global $DB;
 

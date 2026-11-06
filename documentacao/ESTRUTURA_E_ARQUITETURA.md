@@ -1,6 +1,6 @@
 # Estrutura e arquitetura do ADManagement
 
-Base: código local 0.7.0 em 28/10/2026. O [mapa mental](MAPA_MENTAL.html) organiza responsabilidades e arquivos; o [UML](UML_CLASSES.html) apresenta as 31 classes próprias, suas assinaturas e dependências identificadas no fonte.
+Base: código local 0.7.1 em 06/11/2026, para GLPI 12.0.1 e PHP 8.3. O [mapa mental](MAPA_MENTAL.html) organiza responsabilidades e arquivos; o [UML](UML_CLASSES.html) apresenta as 31 classes próprias, suas assinaturas e dependências identificadas no fonte. A adaptação conserva a estrutura e as regras existentes; veja o [relatório de compatibilidade](HOMOLOGACAO_GLPI12_PHP83.md).
 
 ## Organização
 
@@ -30,10 +30,11 @@ Os arquivos legados `config/acesso.php`, `ControleDeAcesso` e `ConfiguracaoDeAce
 | `Ticket`, `Ticket_User`, `Group_Ticket`, `CommonITILActor` | Estado, tabelas e atores atribuídos; leitura por recurso continua obrigatória. |
 | `Group_User::getGroupUsers`, `DbUtils::formatUserName` | Catálogo e nomes dos técnicos da equipe autorizada. |
 | `Ticket::getStatus`, `Ticket::getFormURLWithID`, `Html::convDateTime` | Status, links e datas SQL apresentados conforme o GLPI. |
-| `Dropdown`, `Html::input`, `Html::hidden`, `Html::closeForm` | Seletores, campos, escape e fechamento com token nativo. `showFromArray` acrescenta colchetes automaticamente quando múltiplo; `show` preserva o nome recebido. |
+| `Dropdown`, `Html::input`, `Html::hidden`, `Html::closeForm` | Seletores, campos, escape e fechamento do formulário. No GLPI 12, o kernel verifica CSRF por cabeçalhos de origem. `showFromArray` acrescenta colchetes automaticamente quando múltiplo; `show` preserva o nome recebido. |
 | `Config::getConfigurationValues`, `Config::setConfigurationValues` | Persistência dos documentos administrativos próprios. |
+| `ReAuthManager::checkReAuthenticationOrRedirect` | Confirmação nativa de identidade recente antes dos catálogos sensíveis da configuração administrativa. |
 
-As APIs foram comparadas com o código oficial das versões 11.0.4 e 11.0.6. Isso não constitui homologação de uma instalação customizada. LDAP, assinatura do resumo e regras de importação continuam próprios porque possuem regras que não equivalem às funções gerais do GLPI.
+As APIs desta entrega foram conferidas no código oficial do GLPI 12.0.1 e exercitadas no laboratório com PHP 8.3.36 web/CLI. A pesquisa anterior de GLPI 11 permanece histórica e não define a matriz atual. A assinatura de abas de `CommonGLPI` continua compatível, sem alteração preventiva em `PerfilDaFerramenta`. Isso não constitui homologação da instalação customizada. LDAP, assinatura do resumo e regras de importação continuam próprios porque possuem regras que não equivalem às funções gerais do GLPI.
 
 ## Autorização e fluxo
 
@@ -193,4 +194,4 @@ Onze suítes PHP cobrem perfis, visibilidade, consultas nativas, fluxo HTTP, rev
 
 Execute `./tests/run.ps1`, com `-ExecutavelPhp` apontando ao executável PHP quando necessário. As onze suítes não usam AD nem banco real; a cobertura inclui perfil ativo, pareamento de setores, paginação após READ, POST direto, entidade filha, migração, escape HTML, prazo, desafio, posse e concorrência. A suíte de documentação confere comentários em classes, funções e controles PHP.
 
-As classes, variáveis e funções próprias usam português brasileiro. Contratos exigidos por GLPI/PHP conservam os nomes oficiais. Há uma linha em branco entre linhas de código; comentários e literais HTML/CSS permanecem agrupados. A homologação operacional no GLPI 11.0.4/11.0.6 e no PHP web continua pendente.
+As classes, variáveis e funções próprias usam português brasileiro. Contratos exigidos por GLPI/PHP conservam os nomes oficiais. Há uma linha em branco entre linhas de código; comentários e literais HTML/CSS permanecem agrupados. A validação local em GLPI 12.0.1/PHP 8.3.36 e as pendências de homologação do servidor estão registradas no relatório específico.

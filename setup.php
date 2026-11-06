@@ -70,7 +70,7 @@ if (!function_exists('plugin_version_admanagement')) {
 
             'name' => 'ADManagement',
 
-            'version' => '0.7.0',
+            'version' => '0.7.1',
 
             'author' => 'MatheusAGoveia',
 
@@ -82,13 +82,27 @@ if (!function_exists('plugin_version_admanagement')) {
 
                 'glpi' => [
 
-                    'min' => '11.0.4',
+                    'min' => '12.0.1',
 
-                    'max' => '11.0.7'
+                    'max' => '12.0.2'
 
                 ],
 
-                'php' => ['min' => '8.2'],
+                'php' => [
+
+                    'min' => '8.3',
+
+                    'max' => '9.0',
+
+                    'exts' => [
+
+                        'json' => ['required' => true],
+
+                        'mbstring' => ['required' => true],
+
+                    ],
+
+                ],
 
             ],
 
@@ -97,7 +111,7 @@ if (!function_exists('plugin_version_admanagement')) {
     }
 
     /**
-     * Recusa carregamento fora da faixa de versões alvo desta base inicial.
+     * Recusa releases, runtimes e extensões fora do alvo GLPI 12/PHP 8.3.
      *
      * O nome e a assinatura deste ponto de entrada são contratos do GLPI e precisam ser
      * preservados.
@@ -113,25 +127,33 @@ if (!function_exists('plugin_version_admanagement')) {
 
         }
 
-        // Mantém o intervalo já declarado: a partir de 11.0.4 e antes de 11.0.7.
+        // Esta entrega homologa a release oficial 12.0.1, sem aceitar versões de desenvolvimento.
 
-        if (version_compare(GLPI_VERSION, '11.0.4', '<')) {
-
-            return false;
-
-        }
-
-        // Recusa versões a partir de 11.0.7, fora da faixa declarada para esta base.
-
-        if (version_compare(GLPI_VERSION, '11.0.7', '>=')) {
+        if (GLPI_VERSION !== '12.0.1') {
 
             return false;
 
         }
 
-        // O código exige a versão mínima de PHP definida para esta base do plugin.
+        $requisitos_php = plugin_version_admanagement()['requirements']['php'];
 
-        if (version_compare(PHP_VERSION, '8.2', '<')) {
+        // Usa os mesmos limites informados ao gerenciador nativo de plugins e ao Composer.
+
+        if (
+
+            version_compare(PHP_VERSION, $requisitos_php['min'], '<')
+
+            || version_compare(PHP_VERSION, $requisitos_php['max'], '>=')
+
+        ) {
+
+            return false;
+
+        }
+
+        // A instalação manual pelo GLPI também precisa conferir as extensões usadas pelas regras.
+
+        if (!extension_loaded('json') || !extension_loaded('mbstring')) {
 
             return false;
 

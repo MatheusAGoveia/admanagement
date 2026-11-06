@@ -164,7 +164,7 @@ try {
 
             true,
 
-            '11.0.6',
+            '12.0.1',
 
             [
 
@@ -186,7 +186,7 @@ try {
 
             true,
 
-            '11.0.6',
+            '12.0.1',
 
             [
 
@@ -208,7 +208,7 @@ try {
 
             true,
 
-            '11.0.6',
+            '12.0.1',
 
             [
 
@@ -230,7 +230,7 @@ try {
 
             true,
 
-            '11.0.6',
+            '12.0.1',
 
             ['antiga'],
 
@@ -246,7 +246,7 @@ try {
 
             true,
 
-            '11.0.6',
+            '12.0.1',
 
             [
 
@@ -268,7 +268,7 @@ try {
 
             true,
 
-            '11.0.6',
+            '12.0.1',
 
             [
 
@@ -290,7 +290,7 @@ try {
 
             false,
 
-            '11.0.6',
+            '12.0.1',
 
             ['correta'],
 
@@ -306,7 +306,7 @@ try {
 
             true,
 
-            '11.0.4',
+            '12.0.1',
 
             ['correta'],
 
@@ -322,7 +322,7 @@ try {
 
             true,
 
-            '11.0.7',
+            '12.0.2',
 
             ['correta'],
 
@@ -334,13 +334,53 @@ try {
 
     ];
 
+    // Acrescenta os limites do alvo sem aceitar releases ou runtimes não homologados.
+
+    $cenarios = array_merge($cenarios, [
+
+        ['recusa GLPI 11 anterior', true, '11.0.6', ['correta'], 6, false],
+
+        ['recusa GLPI 12 antes do alvo', true, '12.0.0', ['correta'], 6, false],
+
+        ['recusa GLPI de desenvolvimento', true, '12.0.1-dev', ['correta'], 6, false],
+
+        ['recusa GLPI 13 não homologado', true, '13.0.0', ['correta'], 6, false],
+
+        ['recusa PHP abaixo de 8.3', true, '12.0.1', ['correta'], 6, false, '8.2.99'],
+
+        ['aceita política mínima PHP 8.3', true, '12.0.1', ['correta'], 6, true, '8.3.0'],
+
+        ['recusa PHP 9 não homologado', true, '12.0.1', ['correta'], 6, false, '9.0.0'],
+
+        ['recusa ausência de mbstring', true, '12.0.1', ['correta'], 6, false, PHP_VERSION, true],
+
+    ]);
+
     // Executa cada combinação de nomes, ordem de inclusão e versão GLPI em processo independente.
 
     foreach (
 
-        $cenarios as [$nome, $com_contexto, $versao, $chaves, $total_funcoes, $requisitos]
+        $cenarios as $cenario
 
     ) {
+
+        [$nome, $com_contexto, $versao, $chaves, $total_funcoes, $requisitos] = $cenario;
+
+        // Substitui somente a constante na cópia temporária para conferir os limites da política.
+
+        $versao_php = $cenario[6] ?? PHP_VERSION;
+
+        $sem_mbstring = $cenario[7] ?? false;
+
+        $codigo_setup = str_replace('PHP_VERSION', var_export($versao_php, true), file_get_contents($raiz . '/setup.php'));
+
+        // Cada processo recebe uma cópia independente; o código do produto não é reescrito.
+
+        foreach ($pastas as $pasta) {
+
+            file_put_contents($pasta . '/setup.php', $codigo_setup);
+
+        }
 
         $entrada = [
 
@@ -366,19 +406,21 @@ try {
 
         file_put_contents($arquivo_entrada, json_encode($entrada, JSON_THROW_ON_ERROR));
 
+        $comando_php = [PHP_BINARY];
+
+        // O parâmetro -n testa ausência real da extensão, sem carregar o INI do laboratório.
+
+        if ($sem_mbstring) {
+
+            $comando_php[] = '-n';
+
+        }
+
+        $comando_php = array_merge($comando_php, [__FILE__, '--cenario', $arquivo_entrada]);
+
         $processo = proc_open(
 
-            [
-
-                PHP_BINARY,
-
-                __FILE__,
-
-                '--cenario',
-
-                $arquivo_entrada
-
-            ],
+            $comando_php,
 
             [
 
@@ -444,11 +486,27 @@ try {
 
             );
 
+            $contrato = $resultado['metadados']['requirements'];
+
+            $metadados_aceitam = version_compare($versao, $contrato['glpi']['min'], '>=')
+
+                && version_compare($versao, $contrato['glpi']['max'], '<')
+
+                && version_compare($versao_php, $contrato['php']['min'], '>=')
+
+                && version_compare($versao_php, $contrato['php']['max'], '<')
+
+                && !$sem_mbstring;
+
+            conferirCarregamento($metadados_aceitam === $requisitos, $nome . ': metadados e requisito concordam');
+
+            conferirCarregamento($contrato['php']['exts']['mbstring']['required'] === true, $nome . ': exige mbstring no GLPI');
+
         }
 
     }
 
-    echo '9 cenários de carregamento concluídos.' . PHP_EOL;
+    echo count($cenarios) . ' cenários de carregamento concluídos.' . PHP_EOL;
 
 } finally {
 

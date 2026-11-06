@@ -41,7 +41,7 @@ final class MenuDaFerramenta {
 
         }
 
-        // O GLPI 11 atende plugins e marketplace pela rota canônica /plugins/.
+        // O GLPI atende plugins e marketplace pela rota canônica /plugins/.
 
         $menu = [
 

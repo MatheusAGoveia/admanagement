@@ -32,6 +32,8 @@ namespace Glpi\Exception {
 
 namespace {
 
+    require_once __DIR__ . '/suporte_reautenticacao.php';
+
     use Glpi\Exception\Http\AccessDeniedHttpException;
 
     use Glpi\Exception\RedirectException;
@@ -499,12 +501,12 @@ namespace {
 
         public static function closeForm(): void {
 
-            echo '<input name="_glpi_csrf_token" value="exclusivo-do-teste"></form>';
+            echo '</form>';
 
         }
 
         /**
-         * Lança a exceção do contrato GLPI 11; a entrada precisa deixá-la chegar ao controlador.
+         * Lança a exceção nativa de redirecionamento; a entrada deve devolvê-la ao controlador.
          */
 
         public static function redirect(
@@ -932,6 +934,8 @@ namespace {
         define('GLPI_VAR_DIR', dirname($cenario['plugin'], 2) . '/var');
 
         $_SESSION = $cenario['sessao'];
+
+        ReautenticacaoDoTeste::$validada = $cenario['reautenticado'] ?? true;
 
         $_GET = $cenario['get'] ?? [];
 
@@ -1467,6 +1471,32 @@ namespace {
             // A configuração precisa apresentar o mapa, além de orientar a edição dos direitos nativos.
 
             $configuracao = array_replace($super_global, ['tela' => 'config.php', 'metodo' => 'GET', 'get' => [], 'post' => []]);
+
+            $configuracao_pendente = array_replace($configuracao, ['reautenticado' => false]);
+
+            $prompt_get = executarEntrada($configuracao_pendente, $pasta);
+
+            conferirFluxo(
+
+                $prompt_get['codigo'] === 302 && $prompt_get['url'] === '/ReAuth/Prompt' && $prompt_get['html'] === '',
+
+                'configuração exige reautenticação antes de mostrar catálogos sensíveis'
+
+            );
+
+            $configuracao_pendente['metodo'] = 'POST';
+
+            $configuracao_pendente['post'] = ['categorias_itil' => [11]];
+
+            $prompt_post = executarEntrada($configuracao_pendente, $pasta);
+
+            conferirFluxo(
+
+                $prompt_post['codigo'] === 302 && $prompt_post['url'] === '/ReAuth/Prompt' && $prompt_post['html'] === '',
+
+                'POST administrativo sem identidade recente não processa configuração'
+
+            );
 
             $mapa_visivel = executarEntrada($configuracao, $pasta);
 

@@ -14,7 +14,7 @@ use GlpiPlugin\Admanagement\RepositorioDeOperacoes;
 
 use GlpiPlugin\Admanagement\ConsultaDeChamados;
 
-require_once __DIR__ . '/../../../inc/includes.php';
+// O kernel do GLPI já carregou a aplicação antes de incluir esta entrada.
 
 $contexto = AcessoGlpi::obterContextoDoTecnico();
 

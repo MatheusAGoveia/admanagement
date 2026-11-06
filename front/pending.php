@@ -20,7 +20,7 @@ use GlpiPlugin\Admanagement\PoliticaDeResultados;
 
 use GlpiPlugin\Admanagement\ConsultaDeChamados;
 
-require_once __DIR__ . '/../../../inc/includes.php';
+// O kernel do GLPI já preparou a aplicação antes de incluir esta entrada.
 
 $contexto = AcessoGlpi::obterContextoDoTecnico();
 

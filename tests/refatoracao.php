@@ -16,6 +16,8 @@ namespace Glpi\Exception\Http {
 
 namespace {
 
+    require_once __DIR__ . '/suporte_reautenticacao.php';
+
     use Glpi\Exception\Http\AccessDeniedHttpException;
 
     use GlpiPlugin\Admanagement\AcessoGlpi;
@@ -660,13 +662,13 @@ namespace {
 
         /**
 
-         * Marca o fechamento e a presença do token no HTML gerado.
+         * Marca o fechamento nativo do GLPI 12 sem inventar um token removido.
 
          */
 
         public static function closeForm(): void {
 
-            echo '<input name="_glpi_csrf_token" value="token-do-teste"></form>';
+            echo '</form>';
 
         }
 

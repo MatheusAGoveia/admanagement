@@ -1,6 +1,8 @@
 # Configurar acesso por perfil
 
-ADManagement 0.7.0 — documentação do código em 28/10/2026. A autorização vem exclusivamente do **perfil ativo**. Pertencer a um grupo ou constar como usuário em uma configuração antiga não concede acesso.
+ADManagement 0.7.1 — documentação do código em 06/11/2026, para GLPI 12.0.1. A autorização vem exclusivamente do **perfil ativo**. Pertencer a um grupo ou constar como usuário em uma configuração antiga não concede acesso.
+
+A configuração administrativa exige a reautenticação nativa do GLPI 12 quando a identidade recente estiver pendente. Após essa confirmação, o GLPI retoma a tela ou ação. A verificação de autorização ocorre antes do pedido de reautenticação; esse mecanismo não aprova solicitações nem altera o alcance dos perfis.
 
 ## Direitos e hierarquia
 
@@ -17,7 +19,7 @@ As entidades e a leitura de cada chamado continuam sujeitas ao GLPI. Ter direito
 
 ## Instalação ou atualização
 
-1. Atualize os arquivos para 0.7.0 e execute a instalação/atualização pela administração de plugins do GLPI.
+1. Em GLPI 12.0.1 com PHP 8.3, atualize os arquivos para 0.7.1 e execute a instalação/atualização pela administração de plugins do GLPI. Preserve a configuração existente e a pasta privada de operações.
 2. O hook registra a chave nativa `plugin_admanagement` sem conceder direitos. A instalação é idempotente e não promove o perfil instalador.
 3. Entre com o perfil administrativo nativo autorizado e abra **Administração → Perfis → perfil da interface central → ADManagement**.
 4. Para técnicos, marque **Operar atribuições pessoais**. Para administradores de setor, marque **Supervisionar setores vinculados**. Salve o formulário nativo de perfil.

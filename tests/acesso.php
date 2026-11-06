@@ -124,7 +124,7 @@ $mostrou = PerfilDaFerramenta::displayTabContentForItem($perfil);
 
 $html = ob_get_clean();
 
-conferirPerfil($mostrou && str_contains($html, '/front/profile.form.php') && str_contains($html, '_glpi_csrf_token'), 'aba usa destino e fechamento nativos');
+conferirPerfil($mostrou && str_contains($html, '/front/profile.form.php') && str_contains($html, '</form>') && !str_contains($html, '_glpi_csrf_token'), 'aba usa destino e fechamento nativos do GLPI 12');
 
 conferirPerfil(Profile::$matriz[0]['field'] === PerfilDaFerramenta::DIREITO && array_keys(Profile::$matriz[0]['rights']) === [READ, UPDATE], 'matriz declara exclusivamente capacidades nativas');
 
@@ -207,5 +207,63 @@ ApresentacaoDaVisibilidade::mostrar('/plugins/admanagement/front/config.php');
 $formulario = ob_get_clean();
 
 conferirPerfil(str_contains($formulario, 'name="perfil_id"') && !str_contains($formulario, 'name="usuario_id"') && !str_contains($formulario, 'name="grupo_id"') && !str_contains($formulario, 'name="papel"'), 'formulário possui somente vínculos de perfil');
+
+// Configuração administrativa exige identidade recente depois de conferir os direitos.
+
+iniciarSessaoDePerfil(0, 40);
+
+$_SESSION['glpiactiveprofile']['config'] = UPDATE;
+
+ReautenticacaoDoTeste::$validada = false;
+
+ReautenticacaoDoTeste::$verificacoes = 0;
+
+$redirecionou = false;
+
+// O sinal de prompt precisa chegar ao kernel, sem apresentar catálogo inválido ou gravar dados.
+
+try {
+
+    AcessoGlpi::exigirConfiguracao();
+
+} catch (\Glpi\Exception\RedirectException $erro) {
+
+    // A URL nativa continua pertencendo ao GLPI, não à ferramenta.
+
+    $redirecionou = $erro->getMessage() === '/ReAuth/Prompt';
+
+}
+
+conferirPerfil($redirecionou && ReautenticacaoDoTeste::$verificacoes === 1, 'administrador sem identidade recente recebe prompt nativo');
+
+iniciarSessaoDePerfil(READ);
+
+$negou = false;
+
+// Uma identidade recente nunca transforma um perfil operacional em administrador.
+
+try {
+
+    AcessoGlpi::exigirConfiguracao();
+
+} catch (\Glpi\Exception\Http\AccessDeniedHttpException $erro) {
+
+    // A recusa de autorização acontece antes de pedir qualquer reautenticação.
+
+    $negou = true;
+
+}
+
+conferirPerfil($negou && ReautenticacaoDoTeste::$verificacoes === 1, 'perfil sem direito é recusado antes da reautenticação');
+
+iniciarSessaoDePerfil(0, 40);
+
+$_SESSION['glpiactiveprofile']['config'] = UPDATE;
+
+ReautenticacaoDoTeste::$validada = true;
+
+AcessoGlpi::exigirConfiguracao();
+
+conferirPerfil(ReautenticacaoDoTeste::$verificacoes === 2, 'administrador reautenticado mantém a configuração autorizada');
 
 echo $GLOBALS['verificacoes_perfil'] . " verificações de acesso por perfil concluídas.\n";
