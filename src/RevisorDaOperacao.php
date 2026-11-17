@@ -40,6 +40,8 @@ final class RevisorDaOperacao {
 
             'validade_proposta' => 120,
 
+            'vinculo' => 80,
+
         ];
 
         // Campos que não fazem parte dessa lista não são copiados para o rascunho.
@@ -126,7 +128,15 @@ final class RevisorDaOperacao {
 
         // A escolha de destino exige domínio cadastrado e OU efetivamente consultada.
 
-        $rascunho = DestinoDaOperacao::aplicar($rascunho, $entrada);
+        // Renovação e bloqueio identificam o destino pela conta existente, sem mover sua OU.
+
+        if ($rascunho['tipo'] === 'criacao') {
+
+            $rascunho = DestinoDaOperacao::aplicar($rascunho, $entrada);
+
+        }
+
+        unset($rascunho['previa_ad']);
 
         unset(
 
@@ -211,6 +221,24 @@ final class RevisorDaOperacao {
         if (trim($nome_para_login) === '') {
 
             $pendencias[] = 'O nome utilizado na composição de login precisa ser preenchido.';
+
+        }
+
+        // Renovação e bloqueio usam prévia real, sem exigir destino de criação ou efeitos antigos pendentes.
+
+        if ($rascunho['tipo'] !== 'criacao') {
+
+            $previa = $rascunho['previa_ad'] ?? [];
+
+            // A preparação explica homônimo, CPF, validade e demais impedimentos específicos.
+
+            if (($previa['estado'] ?? '') !== 'PRONTO' || ($previa['expira'] ?? 0) <= time()) {
+
+                $pendencias[] = $previa['detalhe'] ?? 'Salve a revisão e prepare a operação nos dois domínios.';
+
+            }
+
+            return array_values(array_unique($pendencias));
 
         }
 

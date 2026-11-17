@@ -1,15 +1,18 @@
 {
     "name": "corporate/admanagement",
-    "description": "Revisão de solicitações de rede no GLPI com consultas AD somente de leitura",
+    "description": "Ferramenta GLPI para revisão de solicitações, busca de grupos e renovação/bloqueio explícitos no AD",
     "type": "glpi-plugin",
     "license": "proprietary",
     "require": {
         "php": ">=8.3 <9.0",
         "ext-json": "*",
-        "ext-mbstring": "*"
+        "ext-mbstring": "*",
+        "ext-intl": "*"
     },
     "suggest": {
-        "ext-ldap": "Necessária para consultas reais ao AD"
+        "ext-ldap": "Necessária para consultas reais ao AD",
+        "ext-zip": "Leitura de planilhas XLSX",
+        "phpoffice/phpspreadsheet": "Leitor XLSX fornecido pelo GLPI 12.0.0/12.0.1; ausência mantém CSV disponível"
     },
     "autoload": {
         "psr-4": {
@@ -27,6 +30,9 @@
         "test:concorrencia": "php tests/concorrencia.php",
         "test:documentacao": "php tests/documentacao.php",
         "test:visibilidade": "php tests/visibilidade.php",
-        "test:consultas_nativas": "php tests/consultas_nativas.php"
+        "test:consultas_nativas": "php tests/consultas_nativas.php",
+        "test:servicos": "php tests/servicos.php",
+        "test:execucoes": "php tests/execucoes.php",
+        "test:planilhas": "php tests/planilhas.php"
     }
 }

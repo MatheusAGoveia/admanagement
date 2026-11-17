@@ -14,7 +14,7 @@ $raizDosTestes = $PSScriptRoot
 
 $ExecutavelPhp = (Get-Command -Name $ExecutavelPhp -CommandType Application -ErrorAction Stop).Source
 
-# Percorre todas as suítes independentes, incluindo a cobertura dos comentários do próprio código.
+# Percorre as quatorze suítes independentes, incluindo a cobertura dos comentários do próprio código.
 
 foreach (
 
@@ -40,6 +40,12 @@ foreach (
 
         'consultas_nativas',
 
+        'servicos',
+
+        'execucoes',
+
+        'planilhas',
+
         'documentacao'
 
     )
@@ -58,4 +64,4 @@ foreach (
 
 }
 
-Write-Output 'Todas as onze suítes passaram.'
+Write-Output 'Todas as quatorze suítes passaram.'

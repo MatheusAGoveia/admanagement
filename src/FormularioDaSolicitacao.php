@@ -138,6 +138,16 @@ final class FormularioDaSolicitacao {
 
         }
 
+        // Bloqueio tem título próprio para não ser apresentado como renovação.
+
+        if ($rascunho['tipo'] === 'bloqueio') {
+
+            $nome_operacao = 'Bloqueio';
+
+            $titulo_operacao = 'Bloqueio de acesso';
+
+        }
+
         // O formulário permanece separado dos POSTs da fila e do descarte do rascunho.
 
         echo '<form class="contas-formulario-revisao" method="post" action="' . htmlescape($url_revisao) . '">';
@@ -182,6 +192,10 @@ final class FormularioDaSolicitacao {
 
         echo '</div></div>';
 
+        self::mostrarCampo('vinculo', 'Vínculo (obrigatório para renovar)', $rascunho['vinculo'] ?? '', 80);
+
+        ApresentacaoDePastas::mostrar($rascunho);
+
         // A composição de login é exibida separadamente dos dados de domínio e OU.
 
         self::mostrarLogin($rascunho);
@@ -190,7 +204,9 @@ final class FormularioDaSolicitacao {
 
         echo '<h3 class="contas-subtitulo">Preenchimento manual</h3><div class="contas-campos">';
 
-        self::mostrarCampo('grupos', 'Grupos', $rascunho['grupos'], 2000, true);
+        // Mantém a chave das revisões existentes e apresenta o campo manual como Setor.
+
+        self::mostrarCampo('grupos', 'Setor', $rascunho['grupos'], 2000, true);
 
         self::mostrarCampo('scripts', 'Scripts', $rascunho['scripts'], 500, true);
 
@@ -208,23 +224,29 @@ final class FormularioDaSolicitacao {
 
         );
 
-        self::mostrarCampo(
+        // A validade da renovação é calculada na prévia; texto livre continua apenas na criação pendente.
 
-            'validade_proposta',
+        if ($rascunho['tipo'] === 'criacao') {
 
-            'Validade proposta (regra definitiva pendente)',
+            self::mostrarCampo(
 
-            $rascunho['validade_proposta'] ?? '',
+                'validade_proposta',
 
-            120
+                'Validade proposta (regra definitiva pendente)',
 
-        );
+                $rascunho['validade_proposta'] ?? '',
+
+                120
+
+            );
+
+        }
 
         echo '<button class="btn btn-outline-primary mt-2" name="acao" value="consultar_diretorio">Consultar login e duplicidades no AD configurado</button>';
 
         ApresentacaoDeConsultas::mostrar($rascunho);
 
-        echo '</div><p class="contas-nota">Grupos e Scripts são dados de trabalho. Não são aplicados ao AD nem executados como scripts.</p>';
+        echo '</div><p class="contas-nota">Setor e Scripts são dados de trabalho. Não são aplicados ao AD nem executados como scripts.</p>';
 
         echo '<div class="contas-rodape"><span class="contas-nota">Salvar mantém suas correções para continuar a revisão.</span>';
 
@@ -234,13 +256,31 @@ final class FormularioDaSolicitacao {
 
         // O destino vem de um catálogo real e sua seleção é validada na próxima ação.
 
-        DestinoDaOperacao::mostrar($rascunho);
+        // Só a criação exige escolher uma OU de destino; renovar e bloquear preservam a OU atual.
+
+        if ($rascunho['tipo'] === 'criacao') {
+
+            DestinoDaOperacao::mostrar($rascunho);
+
+        }
 
         echo '</div>';
 
         Html::closeForm();
 
-        RevisaoDaOperacao::mostrar($rascunho, $url_revisao);
+        // Cada serviço possui uma única área de confirmação, adequada aos seus efeitos disponíveis.
+
+        if ($rascunho['tipo'] === 'criacao') {
+
+            RevisaoDaOperacao::mostrar($rascunho, $url_revisao);
+
+        } else {
+
+            // Renovação e bloqueio usam a prévia real, sem repetir a antiga confirmação local.
+
+            ApresentacaoDaOperacao::mostrar($rascunho, $url_revisao);
+
+        }
 
         $pendencias = RevisorDaOperacao::listarPendencias($rascunho);
 
@@ -427,11 +467,11 @@ final class FormularioDaSolicitacao {
 
         // A renovação informa a conta existente e não sugere um novo nome para ela.
 
-        if ($rascunho['tipo'] === 'renovacao') {
+        if ($rascunho['tipo'] !== 'criacao') {
 
             self::mostrarCampo('conta_atendida', 'Login da conta atendida', $rascunho['conta_atendida'], 120);
 
-            echo '<p class="form-hint">Informado pela solicitação; a conta ainda não foi identificada no AD. A renovação não sugere renomear a conta.</p>';
+            echo '<p class="form-hint">Informado pela solicitação; a conta ainda não foi identificada no AD. A operação não sugere renomear a conta.</p>';
 
             return;
 

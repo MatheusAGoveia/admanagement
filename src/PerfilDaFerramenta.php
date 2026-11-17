@@ -14,6 +14,8 @@ final class PerfilDaFerramenta extends \CommonGLPI {
 
     public const DIREITO = 'plugin_admanagement';
 
+    public const DIREITO_LOTES = 'plugin_admanagement_lotes';
+
     /**
 
      * Nomeia a aba somente para administradores autorizados a configurar o plugin.
@@ -74,6 +76,11 @@ final class PerfilDaFerramenta extends \CommonGLPI {
 
             ],
 
+            [
+                'field' => self::DIREITO_LOTES,
+                'label' => 'Lotes independentes de chamados',
+                'rights' => [UPDATE => 'Revisar e executar renovação/bloqueio em lotes'],
+            ],
         ], ['title' => 'Permissões do perfil', 'canedit' => true]);
 
         echo '<p>Supervisão prevalece sobre operação pessoal. Um supervisor sem setores vinculados fica sem acesso. Estas permissões não concedem configuração global nem ampliam entidades ou leitura de chamados do GLPI.</p>';
@@ -96,17 +103,18 @@ final class PerfilDaFerramenta extends \CommonGLPI {
 
         $direitos = \ProfileRight::getAllPossibleRights();
 
-        // Atualizações não devem inserir novamente uma chave já registrada.
+        $novos = array_values(array_diff([self::DIREITO, self::DIREITO_LOTES], array_keys($direitos)));
 
-        if (array_key_exists(self::DIREITO, $direitos)) {
+        // Registrar direito não concede seu valor a nenhum perfil.
+
+        if ($novos === []) {
 
             return true;
 
         }
 
-        return \ProfileRight::addProfileRights([self::DIREITO]);
+        return \ProfileRight::addProfileRights($novos);
 
     }
 
 }
-

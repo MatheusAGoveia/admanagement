@@ -76,15 +76,17 @@ final class ImportadorDaSolicitacao {
 
             'RENOVAR USUÁRIO' => 'renovacao',
 
+            'BLOQUEIO DE ACESSO' => 'bloqueio',
+
         ];
 
         $tipo = $tipos[$formulario['tipo_servico_rede'] ?? ''] ?? null;
 
-        // A tradução aceita somente os valores exatos de criação e renovação definidos na origem.
+        // A tradução aceita somente os valores exatos de criação, renovação e bloqueio definidos na origem.
 
         if ($tipo === null) {
 
-            throw new DomainException('O serviço solicitado não corresponde a criação ou renovação de usuário.');
+            throw new DomainException('O serviço solicitado não corresponde a criação, renovação ou bloqueio de usuário.');
 
         }
 
@@ -99,6 +101,24 @@ final class ImportadorDaSolicitacao {
             default => null,
 
         };
+
+        $avisos_importacao = [];
+
+        // Pastas malformadas exigem revisão manual, mas não inventam uma lista de grupos encontrados.
+
+        try {
+
+            $pastas_solicitadas = BuscaDePastas::extrairSolicitadas($formulario['pastas_rede_json'] ?? null);
+
+        } catch (DomainException $erro) {
+
+            // A entrada manual permanece disponível para corrigir a informação não reconhecida.
+
+            $pastas_solicitadas = [];
+
+            $avisos_importacao[] = $erro->getMessage();
+
+        }
 
         $origem_relevante = $formulario;
 
@@ -126,6 +146,12 @@ final class ImportadorDaSolicitacao {
 
             'tipo' => $tipo,
 
+            'servico_origem' => (string) $formulario['tipo_servico_rede'],
+
+            'vinculo' => (string) ($formulario['vinculo'] ?? ''),
+
+            'pastas_solicitadas' => $pastas_solicitadas,
+
             'assinatura_origem' => hash('sha256', json_encode($origem_relevante, JSON_THROW_ON_ERROR)),
 
             'nome_civil' => (string) ($formulario['name'] ?? ''),
@@ -140,7 +166,7 @@ final class ImportadorDaSolicitacao {
 
             // usuario_rede identifica a conta atendida; login_rede é espelhamento e não é importado.
 
-            'conta_atendida' => $tipo === 'renovacao' ? (string) ($formulario['usuario_rede'] ?? '') : '',
+            'conta_atendida' => $tipo !== 'criacao' ? (string) ($formulario['usuario_rede'] ?? '') : '',
 
             'login_pretendido' => '',
 
@@ -156,7 +182,7 @@ final class ImportadorDaSolicitacao {
 
             'validade_proposta' => '',
 
-            'avisos_estrutura' => $formulario['avisos_estrutura'] ?? [],
+            'avisos_estrutura' => array_merge($formulario['avisos_estrutura'] ?? [], $avisos_importacao),
 
             'revisao' => 1,
 

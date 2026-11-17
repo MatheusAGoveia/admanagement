@@ -59,3 +59,11 @@ Fila, URL direta, GET/POST, visão geral, histórico, pendências e auditoria re
 Troca de perfil, direitos, entidades ou mapa invalida o resumo observado. A entidade ativa é distinta da entidade do chamado: abrir um chamado de entidade filha autorizada não invalida seu resumo por si só. Uma troca real de contexto observada torna o desafio anterior inutilizável.
 
 O cadastro não cria perfis/grupos nem altera atribuições. A confirmação registra somente revisão local; não grava no AD e não fecha chamados. As suítes locais usam dublês. Homologação no GLPI real continua necessária.
+
+## Lotes independentes — versão 0.8.0
+
+Na aba ADManagement do perfil, o direito adicional **Lotes independentes de chamados → Revisar e executar renovação/bloqueio em lotes** usa a chave nativa `plugin_admanagement_lotes` com UPDATE. Exige também o acesso operacional existente ao plugin. A instalação registra a chave com zero; nenhum perfil recebe a capacidade automaticamente, inclusive o perfil Super-Admin.
+
+Esse direito permite operar a planilha independentemente de chamados. A autoria e a entidade ativa ficam fixadas no lote; trocar o contexto invalida confirmações. A entidade registra o contexto do operador, não restringe os usuários AD por correspondência automática. Homônimos nos dois domínios bloqueiam cada transação e não há seleção manual para contornar esse impedimento.
+
+Os modelos `Lote` e `ExecucaoDoDiretorio` herdam `CommonDBTM`, mas não oferecem CRUD genérico: inclusão e transições passam pelos fluxos protegidos da ferramenta. Resultados de lote são acessíveis somente ao operador na entidade correspondente.

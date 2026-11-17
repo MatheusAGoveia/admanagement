@@ -766,6 +766,12 @@ namespace {
 
     }
 
+    /** Mantém o ancestral dos modelos próprios sem carregar banco ou kernel nesta suíte isolada. */
+
+    class CommonDBTM extends CommonGLPI {
+
+    }
+
     // Cada arquivo da pasta src é incluído uma única vez nesta execução.
 
     foreach (glob($raiz . '/src/*.php') as $arquivo) {
@@ -1568,7 +1574,7 @@ namespace {
 
         count($rascunho_minimo['avisos_estrutura']),
 
-        7,
+        9,
 
         'avisos dos campos opcionais ausentes'
 

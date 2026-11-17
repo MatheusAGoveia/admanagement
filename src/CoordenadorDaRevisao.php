@@ -5,13 +5,13 @@ namespace GlpiPlugin\Admanagement;
 use DomainException;
 
 /**
- * Coordena ações locais depois da releitura obrigatória de ticket, origem e autorização.
+ * Coordena ações explícitas depois da releitura obrigatória de ticket, origem e autorização.
  */
 
 final class CoordenadorDaRevisao {
 
     /**
-     * Trata apenas comandos explícitos da revisão; nenhum deles executa escrita no AD.
+     * Separa consultas e revisão da execução explícita; somente executar_ad pode enviar efeitos ao diretório.
      */
 
     public static function processar(
@@ -46,6 +46,52 @@ final class CoordenadorDaRevisao {
 
         }
 
+        // A confirmação de efeitos usa dados salvos, sem alterar o alvo por campos enviados no POST.
+
+        if (in_array($acao, ['preparar_ad', 'executar_ad'], true)) {
+
+            $pessoa = (new LeitorDoFormmanager($banco))->consultarIdentificadores($rascunho['formulario_id'], $rascunho['chamado_id']);
+
+            $pessoa += ['nome' => $rascunho['nome_civil'], 'login' => $rascunho['conta_atendida'], 'tipo' => $rascunho['tipo'], 'vinculo' => $rascunho['vinculo'] ?? ''];
+
+            $origem = ['chamado_id' => $rascunho['chamado_id'], 'formulario_id' => $rascunho['formulario_id'], 'assinatura' => $base['assinatura_origem']];
+
+            $operador = new OperadorDoDiretorio();
+
+            // Preparar consulta os dois domínios, mas não preenche CPF nem altera validade.
+
+            if ($acao === 'preparar_ad') {
+
+                $rascunho['previa_ad'] = $operador->preparar($pessoa, $origem, $contexto);
+
+            } else {
+
+                // O desafio pertence à prévia atual e não substitui a revisão da origem aprovada.
+
+                $previa = $rascunho['previa_ad'] ?? [];
+
+                // Só o desafio vigente e o aceite explícito podem encaminhar os efeitos revisados.
+
+                if (($entrada['confirmar_ad'] ?? '') !== '1' || !is_string($entrada['desafio_ad'] ?? null) || !isset($previa['desafio']) || !hash_equals($previa['desafio'], $entrada['desafio_ad'])) {
+
+                    throw new DomainException('Confirme os efeitos da prévia atual antes de executar.');
+
+                }
+
+                unset($rascunho['previa_ad']);
+
+                $rascunho['resultado_ad'] = $operador->executar($pessoa, $previa, $origem, $contexto);
+
+            }
+
+            unset($pessoa);
+
+            $rascunho['revisao']++;
+
+            return $rascunho;
+
+        }
+
         // Prepara somente o resumo do trabalho, sem executar AD ou finalizar chamado.
 
         if ($acao === 'preparar_resumo') {
@@ -75,6 +121,75 @@ final class CoordenadorDaRevisao {
         }
 
         $revisado = RevisorDaOperacao::aplicar($rascunho, $entrada);
+
+        // A busca de grupos não concede acesso e mantém referências manuais separadas dos resultados.
+
+        if ($acao === 'buscar_pastas') {
+
+            $consulta = BuscaDePastas::consultar(EntradaDaFerramenta::lerTexto($entrada['busca_pasta'] ?? '', 200));
+
+            $consulta['configuracao'] = hash('sha256', json_encode(ConfiguracaoDoDiretorio::consultar(), JSON_THROW_ON_ERROR));
+
+            $revisado['consulta_pastas'] = $consulta;
+
+            return $revisado;
+
+        }
+
+        // Seleção verificada só aceita objetos presentes no catálogo vigente da sessão.
+
+        if ($acao === 'selecionar_pastas') {
+
+            $consulta = $rascunho['consulta_pastas'] ?? [];
+
+            $chaves = $entrada['grupos_pastas'] ?? [];
+
+            // Expiração ou mudança de conexão impede tratar referências antigas como verificadas.
+
+            if (($consulta['expira'] ?? 0) <= time() || ($consulta['configuracao'] ?? '') !== hash('sha256', json_encode(ConfiguracaoDoDiretorio::consultar(), JSON_THROW_ON_ERROR)) || !is_array($chaves) || !array_is_list($chaves)) {
+
+                throw new DomainException('O catálogo de grupos expirou ou mudou. Pesquise novamente.');
+
+            }
+
+            $catalogo = array_column($consulta['itens'], null, 'chave');
+
+            $revisado['grupos_de_pastas'] = [];
+
+            // Um identificador fora dos resultados interrompe a seleção inteira.
+
+            foreach ($chaves as $chave) {
+
+                // Estruturas aninhadas e valores livres não são grupos encontrados no AD.
+
+                if (!is_string($chave) || !isset($catalogo[$chave])) {
+
+                    throw new DomainException('Grupo fora do catálogo consultado.');
+
+                }
+
+                $revisado['grupos_de_pastas'][$chave] = $catalogo[$chave];
+
+            }
+
+            $revisado['grupos_de_pastas'] = array_values($revisado['grupos_de_pastas']);
+
+            $nomes = [];
+
+            // O resumo registra a seleção revisada sem copiar a resposta LDAP completa.
+
+            foreach ($revisado['grupos_de_pastas'] as $grupo) {
+
+                $nomes[] = $grupo['nome'] . ' (' . $grupo['dominio'] . ')';
+
+            }
+
+            $revisado['grupos_pastas_resumo'] = implode("\n", $nomes);
+
+
+            return $revisado;
+
+        }
 
         // Consulta a árvore real do domínio selecionado e guarda um catálogo temporário para esta revisão.
 

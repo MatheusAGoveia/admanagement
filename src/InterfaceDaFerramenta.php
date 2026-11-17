@@ -50,6 +50,8 @@ final class InterfaceDaFerramenta {
 
             'overview' => 'Visão geral dos chamados',
 
+            'lotes' => 'Lotes de renovação e bloqueio',
+
             'historico' => 'Histórico de chamados',
 
             'auditoria' => 'Auditoria',
@@ -186,9 +188,9 @@ final class InterfaceDaFerramenta {
 
         }
 
-        // Grupos e Scripts continuam campos manuais e ficam vazios antes da importação.
+        // Setor e Scripts continuam campos manuais e ficam vazios antes da importação.
 
-        echo '<div class="contas-campo"><label for="contas-vazio-grupos">Grupos</label>';
+        echo '<div class="contas-campo"><label for="contas-vazio-grupos">Setor</label>';
 
         echo '<textarea class="form-control" rows="3" id="contas-vazio-grupos"></textarea></div>';
 
@@ -258,6 +260,14 @@ final class InterfaceDaFerramenta {
 
         ];
 
+        // A nova capacidade precisa ser concedida explicitamente na matriz nativa do perfil.
+
+        if (AcessoGlpi::podeOperarLotes()) {
+
+            $abas['lotes'] = ['Lotes', 'lotes.php'];
+
+        }
+
         // Inclui o atalho administrativo somente para usuários com direito nativo de configuração.
 
         if ($pode_configurar) {
@@ -322,6 +332,11 @@ final class InterfaceDaFerramenta {
 
         echo <<<'HTML'
 <style>
+.contas-area .contas-bloco-pastas { padding: 1rem; margin: 1rem 0; border: 1px solid #dfe3eb; border-radius: 6px; background: #fafbfe; }
+.contas-area .contas-bloco-pastas .table { font-size: .8rem; }
+.contas-area .contas-bloco-pastas td { overflow-wrap: anywhere; }
+.contas-area .contas-detalhes:has(> .contas-revisao:only-child) { grid-template-columns: minmax(0, 1fr); }
+
 .contas-area {
     --contas-roxo: #786eb9;
     --contas-borda: #dfe3eb;

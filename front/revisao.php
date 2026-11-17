@@ -1,6 +1,6 @@
 <?php
 
-// Entrada das ações de importação, correção e descarte do rascunho local.
+// Entrada das ações de importação, revisão, descarte e execução explicitamente confirmada.
 
 use Glpi\Exception\Http\AccessDeniedHttpException;
 
@@ -212,6 +212,32 @@ try {
 
     }
 
+    // Reconciliar lê o resultado anterior, mesmo se a aprovação foi revogada; nunca autoriza outro efeito.
+
+    if ($metodo === 'POST' && $acao === 'reconciliar_ad') {
+
+        // A leitura nativa do chamado e o contexto já foram conferidos antes de recuperar o rascunho.
+
+        if ($rascunho === null || $rascunho['revisao'] !== EntradaDaFerramenta::lerIdentificador($entrada['revisao'] ?? null) || !isset($rascunho['resultado_ad']['execucao_id'])) {
+
+            throw new DomainException('Não há tentativa dessa revisão para conferir.');
+
+        }
+
+        $origem_execucao = ['chamado_id' => $chamado_id, 'formulario_id' => $rascunho['formulario_id']];
+
+        $rascunho['resultado_ad'] = (new \GlpiPlugin\Admanagement\OperadorDoDiretorio())->reconciliar($rascunho['resultado_ad']['execucao_id'], $origem_execucao, $contexto);
+
+        $revisao_anterior = $rascunho['revisao'];
+
+        $rascunho['revisao']++;
+
+        RepositorioDeRascunhos::salvar($rascunho, $revisao_anterior);
+
+        Html::redirect($url_revisao . '?id=' . $chamado_id);
+
+    }
+
     // A origem é relida também no GET; rascunho salvo não mantém uma aprovação antiga válida.
 
     $leitor = new LeitorDoFormmanager($DB);
@@ -268,7 +294,9 @@ try {
 
                     'preparar_resumo',
 
-                    'confirmar_revisao'
+                    'confirmar_revisao',
+
+                    'buscar_pastas', 'selecionar_pastas', 'preparar_ad', 'executar_ad'
 
                 ],
 
@@ -413,7 +441,11 @@ try {
 
                     'preparar_resumo' => 'RESUMO_PREPARADO',
 
-                    'confirmar_revisao' => 'REVISAO_CONFIRMADA'
+                    'confirmar_revisao' => 'REVISAO_CONFIRMADA',
+
+                    'buscar_pastas' => 'CONSULTA_PASTAS', 'selecionar_pastas' => 'SELECAO_PASTAS',
+
+                    'preparar_ad' => 'PREVIA_AD', 'executar_ad' => 'EXECUCAO_AD'
 
                 ];
 
@@ -423,7 +455,7 @@ try {
 
         );
 
-        Session::addMessageAfterRedirect('Dados de trabalho salvos na sessão. Nenhuma operação no AD ou no chamado foi executada.');
+        Session::addMessageAfterRedirect($acao === 'executar_ad' ? 'Resultado registrado no painel da operação. O chamado não foi finalizado automaticamente.' : 'Dados de trabalho salvos na sessão. Nenhuma operação no AD ou no chamado foi executada.');
 
         Html::redirect($url_revisao . '?id=' . $chamado_id);
 

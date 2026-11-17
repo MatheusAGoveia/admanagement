@@ -348,7 +348,9 @@ final class RepositorioDeOperacoes {
 
                     'CONSULTA_DIRETORIO',
 
-                    'CONSULTA_OUS'
+                    'CONSULTA_OUS',
+
+                    'CONSULTA_PASTAS', 'SELECAO_PASTAS', 'PREVIA_AD', 'EXECUCAO_AD'
 
                 ];
 
@@ -393,6 +395,10 @@ final class RepositorioDeOperacoes {
                             'scripts',
 
                             'pastas',
+
+                            'vinculo',
+
+                            'grupos_pastas_resumo',
 
                             'validade_proposta'
 

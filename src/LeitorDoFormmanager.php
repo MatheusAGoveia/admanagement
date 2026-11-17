@@ -142,6 +142,10 @@ final class LeitorDoFormmanager {
 
             'usuario_rede',
 
+            'vinculo',
+
+            'pastas_rede_json',
+
             'is_deleted',
 
             'is_active',
@@ -369,6 +373,10 @@ final class LeitorDoFormmanager {
             'matricula',
 
             'usuario_rede',
+
+            'vinculo',
+
+            'pastas_rede_json',
 
             'tickets_id_rede',
 

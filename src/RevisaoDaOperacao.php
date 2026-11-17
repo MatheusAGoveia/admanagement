@@ -28,6 +28,10 @@ final class RevisaoDaOperacao {
 
         'tipo' => 'Operação',
 
+        'vinculo' => 'Vínculo',
+
+        'grupos_pastas_resumo' => 'Grupos de acesso selecionados',
+
         'nome_civil' => 'Nome civil',
 
         'nome_social' => 'Nome social',
@@ -44,7 +48,7 @@ final class RevisaoDaOperacao {
 
         'ou' => 'OU selecionada',
 
-        'grupos' => 'Grupos manuais',
+        'grupos' => 'Setor',
 
         'scripts' => 'Scripts manuais',
 

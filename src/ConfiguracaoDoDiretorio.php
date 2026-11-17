@@ -5,7 +5,7 @@ namespace GlpiPlugin\Admanagement;
 use InvalidArgumentException;
 
 /**
- * Configura somente leitura LDAP; senhas continuam no ambiente do servidor.
+ * Configura conexões LDAP próprias; credenciais continuam no ambiente e efeitos exigem confirmação explícita.
  */
 
 final class ConfiguracaoDoDiretorio {
@@ -28,7 +28,7 @@ final class ConfiguracaoDoDiretorio {
 
         $dominio = [];
 
-        // Valida e limita os textos administrativos antes de formar a conexão de leitura.
+        // Valida e limita os textos administrativos antes de formar a configuração de conexão LDAP.
 
         foreach (
 

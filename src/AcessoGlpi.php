@@ -113,6 +113,14 @@ final class AcessoGlpi {
 
     }
 
+    /** Autoriza lotes pelo direito nativo adicional, sem ampliar acesso por associação a grupo. */
+
+    public static function podeOperarLotes(): bool {
+
+        return self::podeAcessar() && (bool) Session::haveRight(PerfilDaFerramenta::DIREITO_LOTES, UPDATE);
+
+    }
+
     /**
 
      * Entrega identidade, direitos e escopo normalizados da sessão atual.

@@ -340,7 +340,11 @@ try {
 
         ['recusa GLPI 11 anterior', true, '11.0.6', ['correta'], 6, false],
 
-        ['recusa GLPI 12 antes do alvo', true, '12.0.0', ['correta'], 6, false],
+        ['aceita GLPI 12.0.0 instalado no servidor', true, '12.0.0', ['correta'], 6, true],
+
+        ['recusa GLPI 12.0.0 de desenvolvimento', true, '12.0.0-dev', ['correta'], 6, false],
+
+        ['recusa GLPI 12.0.0 RC', true, '12.0.0-rc1', ['correta'], 6, false],
 
         ['recusa GLPI de desenvolvimento', true, '12.0.1-dev', ['correta'], 6, false],
 
@@ -498,7 +502,11 @@ try {
 
                 && !$sem_mbstring;
 
-            conferirCarregamento($metadados_aceitam === $requisitos, $nome . ': metadados e requisito concordam');
+            // O intervalo nativo admite números entre releases; a política própria também recusa sufixos de desenvolvimento.
+
+            $release_estavel = preg_match('/^[0-9]+\.[0-9]+\.[0-9]+$/D', $versao) === 1;
+
+            conferirCarregamento(($metadados_aceitam && $release_estavel) === $requisitos, $nome . ': faixa e política de release concordam');
 
             conferirCarregamento($contrato['php']['exts']['mbstring']['required'] === true, $nome . ': exige mbstring no GLPI');
 

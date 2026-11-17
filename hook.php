@@ -15,7 +15,7 @@ if (!defined('GLPI_ROOT') || basename(__DIR__) !== 'admanagement') {
 if (!function_exists('plugin_admanagement_install')) {
 
     /**
-     * Registra os direitos nativos sem conceder permissões ou modificar dados externos.
+     * Registra direitos e tabelas próprias usando os recursos nativos, sem conceder permissões ou alterar AD.
      *
      * O nome e a assinatura deste ponto de entrada são contratos do GLPI e precisam ser
      * preservados.
@@ -27,7 +27,9 @@ if (!function_exists('plugin_admanagement_install')) {
 
         return plugin_admanagement_check_prerequisites()
 
-            && \GlpiPlugin\Admanagement\PerfilDaFerramenta::registrarDireito();
+            && \GlpiPlugin\Admanagement\PerfilDaFerramenta::registrarDireito()
+
+            && \GlpiPlugin\Admanagement\InstalacaoDaFerramenta::instalar();
 
     }
 
@@ -40,7 +42,7 @@ if (!function_exists('plugin_admanagement_install')) {
 
     function plugin_admanagement_uninstall(): bool {
 
-        // Esta base não possui tabelas próprias a remover durante a desinstalação.
+        // Preserva tabelas próprias e resultados duráveis: desinstalar não deve apagar a prova de idempotência.
 
         return true;
 

@@ -4,120 +4,116 @@ namespace GlpiPlugin\Admanagement;
 
 use DomainException;
 
-/**
- * Único adaptador LDAP do produto: possui exclusivamente métodos de leitura.
- */
+/** Consulta o diretório sem modificar contas, grupos ou permissões. */
+final class LeitorLdap extends ConexaoLdap {
 
-final class LeitorLdap {
-
-    private \LDAP\Connection $conexao;
-
-    /**
-     * Abre TLS com validação de certificado e credenciais efêmeras vindas do ambiente.
-     */
-
-    public function __construct(
-
-        private readonly array $dominio
-
-    ) {
-
-        // Interrompe a leitura quando a extensão LDAP necessária não está carregada no PHP.
-
-        if (!extension_loaded('ldap')) {
-
-            throw new DomainException('A extensão LDAP não está disponível. Consulta não realizada.');
-
+    /** Pesquisa somente grupos G-ADM-, com filtro literal e limite explícito. */
+    public function buscarGrupos(string $termo): array {
+        $termo = EntradaDaFerramenta::lerTexto($termo, 200);
+        $partes = preg_split('~[\s\\\\/_-]+~u', $termo, -1, PREG_SPLIT_NO_EMPTY);
+        // Termo vazio não deve enumerar todos os grupos da organização por acidente.
+        if ($partes === []) {
+            throw new DomainException('Digite um trecho do nome do grupo para pesquisar.');
         }
-
-        $bind = getenv($dominio['bind_env']);
-
-        $senha = getenv($dominio['senha_env']);
-
-        // Bloqueia a conexão se as referências de ambiente não fornecerem bind e senha válidos.
-
-        if (!is_string($bind) || $bind === '' || !is_string($senha) || $senha === '') {
-
-            throw new DomainException('A credencial da conexão não está disponível no ambiente do servidor.');
-
+        $padrao = '*';
+        // Caracteres de filtro permanecem literais mesmo quando o técnico digita asteriscos.
+        foreach ($partes as $parte) {
+            $padrao .= ldap_escape($parte, '', LDAP_ESCAPE_FILTER) . '*';
         }
-
-        // Recusa iniciar uma conexão sem LDAPS ou STARTTLS.
-
-        if (!in_array($dominio['seguranca'], [
-
-            'LDAPS',
-
-            'STARTTLS'
-
-        ], true)) {
-
-            throw new DomainException('A conexão precisa usar TLS.');
-
+        $linhas = $this->pesquisar('(&(objectCategory=group)(name=G-ADM-*)(|(name=' . $padrao . ')(sAMAccountName=' . $padrao . ')))', ['name', 'sAMAccountName', 'objectGUID', 'description']);
+        // Não apresentar um subconjunto silencioso como resultado completo.
+        if (count($linhas) > 500) {
+            throw new DomainException('Mais de 500 grupos encontrados. Use um trecho mais específico.');
         }
-
-        // A CA deve estar configurada no cliente LDAP; nunca desativar sua validação.
-
-        if (!ldap_set_option(null, LDAP_OPT_X_TLS_REQUIRE_CERT, LDAP_OPT_X_TLS_DEMAND)) {
-
-            throw new DomainException('Não foi possível exigir a validação do certificado LDAP.');
-
+        $grupos = [];
+        // Retém domínio/localização e GUID; nome não é chave de identidade.
+        foreach ($linhas as $linha) {
+            $nome = (string) ($linha['name'][0] ?? '');
+            $guid = (string) ($linha['objectguid'][0] ?? '');
+            // A projeção é validada também na fronteira de retorno do adaptador.
+            if (!str_starts_with(mb_strtoupper($nome), 'G-ADM-') || strlen($guid) !== 16) {
+                throw new DomainException('O AD devolveu um grupo sem identidade válida.');
+            }
+            $grupos[] = ['nome' => $nome, 'guid' => bin2hex($guid), 'dn' => $linha['dn'], 'descricao' => (string) ($linha['description'][0] ?? '')];
         }
-
-        $protocolo = $dominio['seguranca'] === 'LDAPS' ? 'ldaps' : 'ldap';
-
-        $conexao = @ldap_connect($protocolo . '://' . $dominio['host'] . ':' . $dominio['porta']);
-
-        // Interrompe o fluxo quando o cliente não consegue criar a conexão LDAP.
-
-        if ($conexao === false) {
-
-            throw new DomainException('Não foi possível abrir a conexão LDAP.');
-
-        }
-
-        $this->conexao = $conexao;
-
-        ldap_set_option($conexao, LDAP_OPT_PROTOCOL_VERSION, 3);
-
-        ldap_set_option($conexao, LDAP_OPT_REFERRALS, 0);
-
-        ldap_set_option($conexao, LDAP_OPT_NETWORK_TIMEOUT, 5);
-
-        // Exige concluir a negociação TLS antes de autenticar no modo STARTTLS.
-
-        if ($dominio['seguranca'] === 'STARTTLS' && !@ldap_start_tls($conexao)) {
-
-            throw new DomainException('Não foi possível estabelecer o canal TLS.');
-
-        }
-
-        // Recusa consultas quando a autenticação com a credencial de leitura não foi concluída.
-
-        if (!@ldap_bind($conexao, $bind, $senha)) {
-
-            throw new DomainException('A autenticação de leitura LDAP não foi concluída.');
-
-        }
-
-        unset($senha, $bind);
-
+        return $grupos;
     }
 
-    /**
-     * Encerra a conexão sem gravar ou registrar a credencial utilizada.
-     */
-
-    public function __destruct() {
-
-        // Encerra a conexão somente quando ela chegou a ser inicializada.
-
-        if (isset($this->conexao)) {
-
-            @ldap_unbind($this->conexao);
-
+    /** Lê contas para confirmar nomes completos nos dois domínios, incluindo desativadas. */
+    public function listarContasParaOperacao(int $dominio): array {
+        $resultado = @ldap_read($this->conexao, '', '(objectClass=*)', ['defaultNamingContext']);
+        $raiz = $resultado === false ? [] : ldap_get_entries($this->conexao, $resultado);
+        $contexto = (string) ($raiz[0]['defaultnamingcontext'][0] ?? '');
+        // Busca limitada a uma OU não comprova ausência de homônimos no domínio inteiro.
+        if ($contexto === '' || strcasecmp(preg_replace('/\s*,\s*/', ',', $contexto), preg_replace('/\s*,\s*/', ',', $this->dominio['base_dn'])) !== 0) {
+            throw new DomainException('A consulta de identidade exige Base DN igual à raiz do domínio confirmada pelo servidor.');
         }
+        return $this->lerContas('(&(objectCategory=person)(objectClass=user))', $dominio);
+    }
 
+    /** Resolve a conta pelo GUID, que permanece estável mesmo após renomeação ou mudança de OU. */
+    public function lerConta(string $guid, int $dominio): array {
+        // GUID nunca é um filtro LDAP arbitrário recebido do navegador.
+        if (!preg_match('/^[a-f0-9]{32}$/D', $guid)) {
+            throw new DomainException('Identificador de conta inválido.');
+        }
+        $filtro = '(objectGUID=' . ldap_escape(hex2bin($guid), '', LDAP_ESCAPE_FILTER) . ')';
+        $contas = $this->lerContas($filtro, $dominio);
+        // Ausência e multiplicidade impedem usar a identidade revisada anteriormente.
+        if (count($contas) !== 1) {
+            throw new DomainException('A conta identificada não corresponde mais a uma ocorrência única.');
+        }
+        return $contas[0];
+    }
+
+    /** Confere no esquema se CPF é um atributo simples e gravável, sem confundir Escritório. */
+    public function conferirAtributoCpf(): void {
+        $atributo = $this->dominio['atributo_cpf'] ?? '';
+        // A escrita nunca usa um atributo de destino inferido nem o campo Escritório.
+        if ($atributo === '' || in_array(strtolower($atributo), ['office', 'physicaldeliveryofficename'], true)) {
+            throw new DomainException('Homologue o atributo CPF de destino antes de renovar.');
+        }
+        $raiz = @ldap_read($this->conexao, '', '(objectClass=*)', ['schemaNamingContext']);
+        $dados = $raiz === false ? [] : ldap_get_entries($this->conexao, $raiz);
+        $base = $dados[0]['schemanamingcontext'][0] ?? '';
+        // Falha de consulta ao esquema não equivale a confirmação do atributo.
+        if ($base === '') {
+            throw new DomainException('Não foi possível conferir o esquema do atributo CPF.');
+        }
+        $consulta = @ldap_search($this->conexao, $base, '(lDAPDisplayName=' . ldap_escape($atributo, '', LDAP_ESCAPE_FILTER) . ')', ['isSingleValued', 'systemOnly'], 0, 2, 5);
+        $linhas = $consulta === false ? [] : ldap_get_entries($this->conexao, $consulta);
+        // CPF vazio só será adicionado em atributo de valor único, sem escrita em campo de sistema.
+        if (($linhas['count'] ?? 0) !== 1 || strtoupper($linhas[0]['issinglevalued'][0] ?? '') !== 'TRUE' || strtoupper($linhas[0]['systemonly'][0] ?? '') === 'TRUE') {
+            throw new DomainException('O esquema não confirmou um atributo CPF simples e gravável.');
+        }
+    }
+
+    /** Normaliza uma projeção mínima sem armazenar respostas LDAP completas na auditoria. */
+    private function lerContas(string $filtro, int $dominio): array {
+        $atributos = ['name', 'displayName', 'sAMAccountName', 'objectGUID', 'userAccountControl', 'accountExpires', 'physicalDeliveryOfficeName'];
+        $cpf = $this->dominio['atributo_cpf'] ?? '';
+        // A ausência do atributo é preservada e exige homologação antes de seu preenchimento.
+        if ($cpf !== '') {
+            $atributos[] = $cpf;
+        }
+        $contas = [];
+        // Nenhum filtro elimina contas desativadas da verificação de homônimos.
+        foreach ($this->pesquisar($filtro, array_unique($atributos)) as $linha) {
+            $guid = (string) ($linha['objectguid'][0] ?? '');
+            $controle = $linha['useraccountcontrol'][0] ?? '';
+            // Identidade ou estado incompletos não serão interpretados como uma conta ativa.
+            if (strlen($guid) !== 16 || !ctype_digit((string) $controle)) {
+                throw new DomainException('O AD não confirmou identidade e estado de todas as contas consultadas.');
+            }
+            $contas[] = [
+                'guid' => bin2hex($guid), 'dominio' => $dominio, 'dn' => $linha['dn'],
+                'nome' => (string) ($linha['name'][0] ?? ''), 'nome_exibicao' => (string) ($linha['displayname'][0] ?? ''),
+                'login' => (string) ($linha['samaccountname'][0] ?? ''), 'controle' => (string) $controle,
+                'ativa' => (((int) $controle & 2) === 0), 'validade' => (string) ($linha['accountexpires'][0] ?? ''),
+                'cpf' => (string) ($linha[strtolower($cpf)][0] ?? ''), 'escritorio' => (string) ($linha['physicaldeliveryofficename'][0] ?? ''),
+            ];
+        }
+        return $contas;
     }
 
     /**
@@ -268,7 +264,7 @@ final class LeitorLdap {
      * incompleta.
      */
 
-    private function pesquisar(
+    protected function pesquisar(
 
         string $filtro,
 

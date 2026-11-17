@@ -133,7 +133,7 @@ final class ApresentacaoDaConfiguracao {
 
         );
 
-        echo '<br><label><input type="checkbox" name="obrigatorio" value="1" checked> Domínio obrigatório para disponibilidade e duplicidades</label><p>Não há allowlist de OUs, conta modelo ou opção de escrita. A Base DN identifica o domínio consultado.</p><button class="btn btn-primary">Salvar conexão de leitura</button>';
+        echo '<br><label><input type="checkbox" name="obrigatorio" value="1" checked> Domínio obrigatório para disponibilidade e duplicidades</label><p>Todas as OUs continuam permitidas, sem usuário de referência. Renovação e bloqueio exigem os dois domínios e Base DN na raiz. Salvar não executa AD; as ações confirmadas exigem credenciais com delegação apropriada.</p><button class="btn btn-primary">Salvar conexão LDAP</button>';
 
         \Html::closeForm();
 

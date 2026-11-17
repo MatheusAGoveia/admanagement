@@ -70,7 +70,7 @@ if (!function_exists('plugin_version_admanagement')) {
 
             'name' => 'ADManagement',
 
-            'version' => '0.7.1',
+            'version' => '0.8.1',
 
             'author' => 'MatheusAGoveia',
 
@@ -82,7 +82,7 @@ if (!function_exists('plugin_version_admanagement')) {
 
                 'glpi' => [
 
-                    'min' => '12.0.1',
+                    'min' => '12.0.0',
 
                     'max' => '12.0.2'
 
@@ -127,9 +127,9 @@ if (!function_exists('plugin_version_admanagement')) {
 
         }
 
-        // Esta entrega homologa a release oficial 12.0.1, sem aceitar versões de desenvolvimento.
+        // Aceita somente as releases verificadas; sufixos de desenvolvimento permanecem fora do alvo.
 
-        if (GLPI_VERSION !== '12.0.1') {
+        if (!in_array(GLPI_VERSION, ['12.0.0', '12.0.1'], true)) {
 
             return false;
 
